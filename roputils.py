@@ -160,6 +160,8 @@ class ELF:
         elif keyword == 'popad':
             # x86 only
             return self.xmem['offset'] + self.xmem['blob'].index('\x61\xc3')
+        elif keyword == 'int3':
+            return self.xmem['offset'] + self.xmem['blob'].index('\xcc')
         else:
             # arbitary chunk
             return self.xmem['offset'] + self.xmem['blob'].index(keyword)
