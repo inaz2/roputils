@@ -1,4 +1,5 @@
 import sys
+import os
 import re
 import struct
 import socket
@@ -25,6 +26,9 @@ class ELF:
         self.fpath = fpath
         self.base = base
         self.sec = dict(relro=False, bind_now=False, stack_canary=False, nx=False, pie=False, rpath=False, runpath=False, dt_debug=False)
+
+        if not os.path.exists(fpath):
+            raise Exception("file not found: %r" % fpath)
 
         p = Popen(['objdump', '-f', fpath], stdout=PIPE)
         for line in p.stdout:
@@ -477,29 +481,23 @@ class Pattern:
             if chunk in s:
                 return s.index(chunk)
         else:
-            raise Exception("not found")
+            raise Exception("pattern not found")
 
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >>sys.stderr, "Usage: %s [checksec|create|offset] ..." % sys.argv[0]
+        print >>sys.stderr, "Usage: python %s [checksec|create|offset] ..." % sys.argv[0]
         sys.exit(1)
     cmd = sys.argv[1]
     if cmd == 'checksec':
-        if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: %s checksec FILE" % sys.argv[0]
-            sys.exit(1)
-        fpath = sys.argv[2]
+        fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
         ELF(fpath).checksec()
     elif cmd == 'create':
-        if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: %s create SIZE" % sys.argv[0]
-            sys.exit(1)
-        size = int(sys.argv[2])
+        size = int(sys.argv[2]) if len(sys.argv) > 2 else 200
         print Pattern.create(size)
     elif cmd == 'offset':
         if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: %s offset ADDRESS" % sys.argv[0]
+            print >>sys.stderr, "Usage: python %s offset ADDRESS" % sys.argv[0]
             sys.exit(1)
         addr = int(sys.argv[2], 16)
         print Pattern.offset(addr)
