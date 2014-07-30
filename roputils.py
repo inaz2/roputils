@@ -88,7 +88,7 @@ class ELF:
             if len(field) != 2:
                 continue
             name, value = field[0], field[1]
-            if name == 'NEEDED':
+            if name in ('NEEDED', 'SONAME'):
                 ary = self._dynamic.setdefault(name, [])
                 ary.append(value)
             else:
@@ -147,39 +147,6 @@ class ELF:
         else:
             return p32(x)
 
-    def gadget(self, keyword, pop_arg=1):
-        regs = ['ax', 'cx', 'dx', 'bx', 'sp', 'bp', 'si', 'di']
-
-        if keyword == 'ret':
-            return self.xmem['offset'] + self.xmem['blob'].index('\xc3')
-        elif keyword == 'leave':
-            return self.xmem['offset'] + self.xmem['blob'].index('\xc9\xc3')
-        elif keyword == 'pop':
-            if isinstance(pop_arg, int):
-                # skip rsp
-                m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % pop_arg, self.xmem['blob'])
-                return self.xmem['offset'] + m.start()
-            else:
-                if len(pop_arg) == 3 and pop_arg[0] in ('r', 'e'):
-                    chunk = chr(0x58+regs.index(pop_arg[1:])) + '\xc3'
-                    return self.xmem['offset'] + self.xmem['blob'].index(chunk)
-                else:
-                    raise Exception("unexpected register: %r" % pop_arg)
-        elif keyword == 'pivot_eax':
-            # xchg esp, eax
-            return self.xmem['offset'] + self.xmem['blob'].index('\x94\xc3')
-        elif keyword == 'pushad':
-            # x86 only
-            return self.xmem['offset'] + self.xmem['blob'].index('\x60\xc3')
-        elif keyword == 'popad':
-            # x86 only
-            return self.xmem['offset'] + self.xmem['blob'].index('\x61\xc3')
-        elif keyword == 'int3':
-            return self.xmem['offset'] + self.xmem['blob'].index('\xcc')
-        else:
-            # arbitary chunk
-            return self.xmem['offset'] + self.xmem['blob'].index(keyword)
-
     def set_base(self, addr, name='__libc_start_main'):
         self.base = addr - self._symbol[name]
 
@@ -206,6 +173,60 @@ class ELF:
 
     def str(self, name):
         return self.base + self._string[name]
+
+    def gadget(self, keyword, reg=None, n=1):
+        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi']
+        if reg:
+            if not (len(reg) == 3 and reg[0] in ('r', 'e')):
+                raise Exception("unexpected register: %r" % reg)
+            r = regs.index('r'+reg[1:])
+        else:
+            r = 4
+
+        if keyword == 'pop':
+            if reg:
+                chunk = chr(0x58+r) + '\xc3'
+                return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+            else:
+                # skip rsp
+                m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % n, self.xmem['blob'])
+                return self.xmem['offset'] + m.start()
+        elif keyword == 'jmp':
+            chunk = '\xff' + chr(0xe0+r)
+            return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+        elif keyword == 'call':
+            chunk = '\xff' + chr(0xd0+r)
+            return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+        elif keyword == 'push':
+            chunk = chr(0x50+r) + '\xc3'
+            return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+        elif keyword == 'pivot':
+            # xchg reg, esp
+            if r == 0:
+                return self.xmem['offset'] + self.xmem['blob'].index('\x94\xc3')
+            else:
+                chunk = '\x87' + chr(0xe0+r) + '\xc3'
+                try:
+                    return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+                except ValueError:
+                    pass
+                chunk = '\x87' + chr(0xc4+8*r) + '\xc3'
+                return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+        elif keyword == 'pushad':
+            # x86 only
+            return self.xmem['offset'] + self.xmem['blob'].index('\x60\xc3')
+        elif keyword == 'popad':
+            # x86 only
+            return self.xmem['offset'] + self.xmem['blob'].index('\x61\xc3')
+        elif keyword == 'leave':
+            return self.xmem['offset'] + self.xmem['blob'].index('\xc9\xc3')
+        elif keyword == 'ret':
+            return self.xmem['offset'] + self.xmem['blob'].index('\xc3')
+        elif keyword == 'int3':
+            return self.xmem['offset'] + self.xmem['blob'].index('\xcc')
+        else:
+            # arbitary chunk
+            return self.xmem['offset'] + self.xmem['blob'].index(keyword)
 
     def checksec(self):
         ary = []
@@ -248,6 +269,37 @@ class ELF:
         print "RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE"
         print ''.join(ary)
 
+    def list_gadgets(self):
+        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi']
+
+        print "%8s" % 'pop',
+        for i in range(6):
+            try:
+                self.gadget('pop', n=i+1)
+                print "\033[32m%d\033[m" % (i+1),
+            except AttributeError:
+                print "\033[31m%d\033[m" % (i+1),
+        print
+
+        for keyword in ['pop', 'jmp', 'call', 'push', 'pivot']:
+            print "%8s" % keyword,
+            for reg in regs:
+                try:
+                    self.gadget(keyword, reg)
+                    print "\033[32m%s\033[m" % reg,
+                except ValueError:
+                    print "\033[31m%s\033[m" % reg,
+            print
+
+        print "%8s" % 'etc',
+        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3']:
+            try:
+                self.gadget(keyword)
+                print "\033[32m%s\033[m" % keyword,
+            except ValueError:
+                print "\033[31m%s\033[m" % keyword,
+        print
+
 
 class ROP(ELF):
     def call(self, addr, *args):
@@ -264,7 +316,7 @@ class ROP(ELF):
             return buf
         else:
             buf = self.p(addr)
-            buf += self.p(self.gadget('pop', len(args)))
+            buf += self.p(self.gadget('pop', n=len(args)))
             for arg in args:
                 buf += self.p(arg)
             return buf
@@ -581,7 +633,7 @@ class Pattern:
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >>sys.stderr, "Usage: python %s [checksec|create|offset] ..." % sys.argv[0]
+        print >>sys.stderr, "Usage: python %s [checksec|create|offset|gadget] ..." % sys.argv[0]
         sys.exit(1)
     cmd = sys.argv[1]
     if cmd == 'checksec':
@@ -596,3 +648,6 @@ if __name__ == '__main__':
             sys.exit(1)
         addr = int(sys.argv[2], 16)
         print Pattern.offset(addr)
+    elif cmd == 'gadget':
+        fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
+        ELF(fpath).list_gadgets()

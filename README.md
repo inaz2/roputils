@@ -17,10 +17,11 @@ Currently roputils.py has 5 classes: ELF, ROP, Shellcode, FormatStr, Proc, Patte
 * Proc: gateway interface of subprocess and socket
 * Pattern: create Metasploit pattern and calculate its offset
 
-roputils.py also can be used in the command line, has 3 subcommands: checksec, create, offset.
+roputils.py also can be used in the command line, has 4 subcommands: checksec, create, offset, gadget.
 
 * checksec: a clone of [checksec.sh](http://www.trapkit.de/tools/checksec.html)
 * create: call Pattern.create()
 * offset: call Pattern.offset()
+* gadget: availability check for tiny gadgets
 
 For more details, just read the codes.
