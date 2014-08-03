@@ -585,7 +585,7 @@ class Proc:
         if isinstance(self.p, Popen):
             return self.p.stdin.write(s)
         else:
-            return self.p.send(s)
+            return self.p.sendall(s)
 
     def read(self, size):
         if isinstance(self.p, Popen):
@@ -612,6 +612,15 @@ class Proc:
             self.p.terminate()
         else:
             self.p.close()
+
+    def strings(self, n=4):
+        if isinstance(self.p, Popen):
+            p_stdout = self.p.stdout
+        else:
+            p_stdout = self.p.makefile()
+        p = Popen(['strings', '-tx', '-n', str(n)], stdin=p_stdout, stdout=PIPE)
+        stdout, stderr = p.communicate()
+        return stdout
 
     def write_p64(self, s):
         return self.write(p64(s))
