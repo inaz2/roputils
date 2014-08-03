@@ -224,6 +224,12 @@ class ELF:
             return self.xmem['offset'] + self.xmem['blob'].index('\xc3')
         elif keyword == 'int3':
             return self.xmem['offset'] + self.xmem['blob'].index('\xcc')
+        elif keyword == 'int0x80':
+            return self.xmem['offset'] + self.xmem['blob'].index('\xcd\x80')
+        elif keyword == 'call_gs':
+            return self.xmem['offset'] + self.xmem['blob'].index('\x65\xff\x15\x10\x00\x00\x00')
+        elif keyword == 'syscall':
+            return self.xmem['offset'] + self.xmem['blob'].index('\x0f\x05')
         else:
             # arbitary chunk
             return self.xmem['offset'] + self.xmem['blob'].index(keyword)
@@ -292,7 +298,7 @@ class ELF:
             print
 
         print "%8s" % 'etc',
-        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3']:
+        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall']:
             try:
                 self.gadget(keyword)
                 print "\033[32m%s\033[m" % keyword,
