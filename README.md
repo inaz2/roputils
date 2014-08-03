@@ -1,7 +1,26 @@
 # roputils
 
-A Return-oriented Programming toolbox
+A Return-oriented Programming toolkit
 
 ## Usage
 
 [examples/ropasaurusrex.py](examples/ropasaurusrex.py) is a write-up of [ropasaurusrex](http://repo.shell-storm.org/CTF/PlaidCTF-2013/Pwnable/ropasaurusrex-200/) in PlaidCTF 2013.
+
+## Overview
+
+Currently roputils.py has 5 classes: ELF, ROP, Shellcode, FormatStr, Proc, Pattern.
+
+* ELF: information of ELF object by using objdump
+* ROP: subclass of ELF, with additional methods for creating ROP stack
+* Shellcode: x86 and x64 shellcode builder
+* FormatStr: create format string for exploiting
+* Proc: gateway interface of subprocess and socket
+* Pattern: create Metasploit pattern and calculate its offset
+
+roputils.py also can be used in the command line, has 3 subcommands: checksec, create, offset.
+
+* checksec: a clone of [checksec.sh](http://www.trapkit.de/tools/checksec.html)
+* create: call Pattern.create()
+* offset: call Pattern.offset()
+
+For more details, just read the codes.

