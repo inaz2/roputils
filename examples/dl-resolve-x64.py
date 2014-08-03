@@ -4,7 +4,6 @@ fpath = sys.argv[1]
 offset = int(sys.argv[2])
 
 rop = ROP(fpath)
-
 addr_stage = rop.section('.bss') + 0x800
 
 buf = rop.fill(offset)
