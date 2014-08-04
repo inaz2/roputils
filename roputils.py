@@ -332,7 +332,7 @@ class ROP(ELF):
     def call_plt(self, name, *args):
         return self.call(self.plt(name), *args)
 
-    def call_chain(self, *calls):
+    def call_chain_ptr(self, *calls):
         if self.wordsize != 8:
             raise Exception('support x86-64 only')
 
@@ -367,7 +367,7 @@ class ROP(ELF):
         ary = []
         for call in calls:
             ary.append([self.got(call[0])] + call[1:])
-        return self.call_chain(*ary)
+        return self.call_chain_ptr(*ary)
 
     def dl_resolve(self, base, name, *args, **kwargs):
         def align(x, origin=0, size=0):
