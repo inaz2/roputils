@@ -434,6 +434,25 @@ class ROP(ELF):
 
         return buf
 
+    def dynamic_syscall(self, addr, data, number, arg1, arg2, arg3):
+        if self.wordsize == 8:
+            pop_rax = data.index('\x58\xc3')
+            pop_rdi = data.index('\x5f\xc3')
+            pop_rsi = data.index('\x5e\xc3')
+            pop_rdx = data.index('\x5a\xc3')
+            syscall = data.index('\x0f\x05')
+            buf = self.p(addr + pop_rax) + self.p(number)
+            buf += self.p(addr + pop_rdi) + self.p(arg1)
+            buf += self.p(addr + pop_rsi) + self.p(arg2)
+            buf += self.p(addr + pop_rdx) + self.p(arg3)
+            buf += self.p(addr + syscall)
+        else:
+            popad = data.index('\x61\xc3')
+            int0x80 = data.index('\xcd\x80')
+            buf = self.p(addr + popad) + struct.pack('<IIIIIIII', 0, 0, 0, 0, arg1, arg2, arg3, number)
+            buf += self.p(addr + int0x80)
+        return buf
+
     def pivot(self, rsp):
         buf = self.p(self.gadget('pop', 'rbp'))
         buf += self.p(rsp - self.wordsize)
