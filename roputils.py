@@ -411,9 +411,9 @@ class ROP(ELF):
                 buf += self.p(kwargs['retaddr'])
             else:
                 buf += self.junk()
-            buf += 'A' * pad_reloc
+            buf += self.fill(pad_reloc)
             buf += struct.pack('<QQQ', self.section('.bss'), r_info, 0)  # Elf64_Rela
-            buf += 'A' * pad_sym
+            buf += self.fill(pad_sym)
             buf += struct.pack('<IIQQ', st_name, 0x12, 0, 0)             # Elf64_Sym
             buf += self.string(name)
         else:
@@ -440,7 +440,7 @@ class ROP(ELF):
             for arg in args:
                 buf += self.p(arg)
             buf += struct.pack('<II', self.section('.bss'), r_info)  # Elf32_Rel
-            buf += 'A' * pad_sym
+            buf += self.fill(pad_sym)
             buf += struct.pack('<IIII', st_name, 0, 0, 0x12)         # Elf32_Sym
             buf += self.string(name)
 
@@ -472,10 +472,15 @@ class ROP(ELF):
         return s + '\x00'
 
     def junk(self, n=1):
-        return 'A' * self.wordsize * n
+        return self.fill(self.wordsize * n)
 
     def fill(self, size, buf=''):
-        return 'A' * (size-len(buf))
+        chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+        buflen = size - len(buf)
+        buf = bytearray()
+        while len(buf) < buflen:
+            buf += random.choice(chars)
+        return buf[:buflen]
 
 
 class Shellcode:
