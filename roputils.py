@@ -75,7 +75,7 @@ class ELF:
                 with open(fpath, 'rb') as f:
                     f.seek(offset)
                     blob = f.read(filesz)
-                self.xmem = dict(offset=vaddr, blob=blob)
+                self.xmem = (vaddr, blob)
         while True:  # read Dynamic Section
             line = p.stdout.readline()
             if line == 'Sections:\n':
@@ -181,7 +181,13 @@ class ELF:
     def str(self, name):
         return self.base + self._string[name]
 
-    def gadget(self, keyword, reg=None, n=1):
+    def gadget(self, keyword, reg=None, n=1, xmem=None):
+        if xmem:
+            addr, blob = xmem
+        else:
+            addr, blob = self.xmem
+            addr += self.base
+
         regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi']
         if reg:
             if not (len(reg) == 3 and reg[0] in ('r', 'e')):
@@ -193,53 +199,53 @@ class ELF:
         if keyword == 'pop':
             if reg:
                 chunk = chr(0x58+r) + '\xc3'
-                return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+                return addr + blob.index(chunk)
             else:
                 # skip rsp
-                m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % n, self.xmem['blob'])
-                return self.xmem['offset'] + m.start()
+                m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % n, blob)
+                return addr + m.start()
         elif keyword == 'jmp':
             chunk = '\xff' + chr(0xe0+r)
-            return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+            return addr + blob.index(chunk)
         elif keyword == 'call':
             chunk = '\xff' + chr(0xd0+r)
-            return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+            return addr + blob.index(chunk)
         elif keyword == 'push':
             chunk = chr(0x50+r) + '\xc3'
-            return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+            return addr + blob.index(chunk)
         elif keyword == 'pivot':
             # xchg reg, esp
             if r == 0:
-                return self.xmem['offset'] + self.xmem['blob'].index('\x94\xc3')
+                return addr + blob.index('\x94\xc3')
             else:
                 chunk = '\x87' + chr(0xe0+r) + '\xc3'
                 try:
-                    return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+                    return addr + blob.index(chunk)
                 except ValueError:
                     pass
                 chunk = '\x87' + chr(0xc4+8*r) + '\xc3'
-                return self.xmem['offset'] + self.xmem['blob'].index(chunk)
+                return addr + blob.index(chunk)
         elif keyword == 'pushad':
             # x86 only
-            return self.xmem['offset'] + self.xmem['blob'].index('\x60\xc3')
+            return addr + blob.index('\x60\xc3')
         elif keyword == 'popad':
             # x86 only
-            return self.xmem['offset'] + self.xmem['blob'].index('\x61\xc3')
+            return addr + blob.index('\x61\xc3')
         elif keyword == 'leave':
-            return self.xmem['offset'] + self.xmem['blob'].index('\xc9\xc3')
+            return addr + blob.index('\xc9\xc3')
         elif keyword == 'ret':
-            return self.xmem['offset'] + self.xmem['blob'].index('\xc3')
+            return addr + blob.index('\xc3')
         elif keyword == 'int3':
-            return self.xmem['offset'] + self.xmem['blob'].index('\xcc')
+            return addr + blob.index('\xcc')
         elif keyword == 'int0x80':
-            return self.xmem['offset'] + self.xmem['blob'].index('\xcd\x80')
+            return addr + blob.index('\xcd\x80')
         elif keyword == 'call_gs':
-            return self.xmem['offset'] + self.xmem['blob'].index('\x65\xff\x15\x10\x00\x00\x00')
+            return addr + blob.index('\x65\xff\x15\x10\x00\x00\x00')
         elif keyword == 'syscall':
-            return self.xmem['offset'] + self.xmem['blob'].index('\x0f\x05')
+            return addr + blob.index('\x0f\x05')
         else:
             # arbitary chunk
-            return self.xmem['offset'] + self.xmem['blob'].index(keyword)
+            return addr + blob.index(keyword)
 
     def checksec(self):
         ary = []
@@ -438,23 +444,20 @@ class ROP(ELF):
 
         return buf
 
-    def dynamic_syscall(self, addr, data, number, arg1, arg2, arg3):
+    def dynamic_syscall(self, addr, data, number, *args):
+        xmem = (addr, data)
+
         if self.wordsize == 8:
-            pop_rax = data.index('\x58\xc3')
-            pop_rdi = data.index('\x5f\xc3')
-            pop_rsi = data.index('\x5e\xc3')
-            pop_rdx = data.index('\x5a\xc3')
-            syscall = data.index('\x0f\x05')
-            buf = self.p(addr + pop_rax) + self.p(number)
-            buf += self.p(addr + pop_rdi) + self.p(arg1)
-            buf += self.p(addr + pop_rsi) + self.p(arg2)
-            buf += self.p(addr + pop_rdx) + self.p(arg3)
-            buf += self.p(addr + syscall)
+            arg_regs = ['rdi', 'rsi', 'rdx', 'rcx']
+
+            buf = self.p(self.gadget('pop', 'rax', xmem=xmem)) + self.p(number)
+            for i, arg in enumerate(args):
+                buf += self.p(self.gadget('pop', arg_regs[i], xmem=xmem)) + self.p(arg)
+            buf += self.p(self.gadget('syscall', xmem=xmem))
         else:
-            popad = data.index('\x61\xc3')
-            int0x80 = data.index('\xcd\x80')
-            buf = self.p(addr + popad) + struct.pack('<IIIIIIII', 0, 0, 0, 0, arg1, arg2, arg3, number)
-            buf += self.p(addr + int0x80)
+            args = list(args) + [0] * (6-len(args))
+            buf = self.p(self.gadget('popad', xmem=xmem)) + struct.pack('<IIIIIIII', args[4], args[3], args[5], 0, args[0], args[2], args[1], number)
+            buf += self.p(self.gadget('int0x80', xmem=xmem))
         return buf
 
     def pivot(self, rsp):
