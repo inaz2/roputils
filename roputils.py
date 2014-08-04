@@ -33,8 +33,14 @@ class ELF:
         if not os.path.exists(fpath):
             raise Exception("file not found: %r" % fpath)
 
-        p = Popen(['objdump', '-f', fpath], stdout=PIPE)
-        for line in p.stdout:
+        self._dynamic = {}
+        self._section = {}
+        p = Popen(['objdump', '-x', fpath], stdout=PIPE)
+        line = ''
+        while True:  # read ELF header
+            line = p.stdout.readline()
+            if line == 'Program Header:\n':
+                break
             if 'DYNAMIC' in line:
                 self.sec['pie'] = True
             field = line.split()
@@ -48,27 +54,12 @@ class ELF:
                 self.wordsize = 4
             else:
                 raise Exception('unsupported format: %s' % field[3])
-        p.terminate()
-
-        self._section = {}
-        p = Popen(['objdump', '-h', fpath], stdout=PIPE)
-        for line in p.stdout:
-            field = line.split()
-            if len(field) != 7:
-                continue
-            name, addr = field[1], int(field[3], 16)
-            self._section[name] = addr
-        p.terminate()
-
-        self._dynamic = {}
-        p = Popen(['objdump', '-p', fpath], stdout=PIPE)
-        line = ''
-        while line != 'Program Header:\n':
-            line = p.stdout.readline()
-        while line != 'Dynamic Section:\n':
+        while True:  # read Program Header
             line = p.stdout.readline()
             field = line.split()
             line = p.stdout.readline()
+            if line == 'Dynamic Section:\n':
+                break
             field.extend(line.split())
             if len(field) != 15:
                 continue
@@ -85,10 +76,14 @@ class ELF:
                     f.seek(offset)
                     blob = f.read(filesz)
                 self.xmem = dict(offset=vaddr, blob=blob)
-        while line != '\n':
+        while True:  # read Dynamic Section
             line = p.stdout.readline()
+            if line == 'Sections:\n':
+                break
             field = line.split()
             if len(field) != 2:
+                continue
+            if field[1].endswith(':'):
                 continue
             name, value = field[0], field[1]
             if name in ('NEEDED', 'SONAME'):
@@ -104,6 +99,15 @@ class ELF:
                     self.sec['runpath'] = True
                 elif name == 'DEBUG':
                     self.sec['dt_debug'] = True
+        while True:  # read Sections
+            line = p.stdout.readline()
+            if not line:
+                break
+            field = line.split()
+            if len(field) != 7:
+                continue
+            name, addr = field[1], int(field[3], 16)
+            self._section[name] = addr
         p.terminate()
 
         self._got = {}
