@@ -101,7 +101,7 @@ class ELF:
                     self.sec['dt_debug'] = True
         while True:  # read Sections
             line = p.stdout.readline()
-            if not line:
+            if line == 'SYMBOL TABLE:\n':
                 break
             field = line.split()
             if len(field) != 7:
