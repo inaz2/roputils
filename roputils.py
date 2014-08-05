@@ -6,6 +6,7 @@ import re
 import struct
 import socket
 import time
+import fcntl
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
 
@@ -579,6 +580,9 @@ class Proc:
             self.p = socket.create_connection((kwargs['host'], kwargs['port']))
         else:
             self.p = Popen(args, stdin=PIPE, stdout=PIPE)
+            fd = self.p.stdout.fileno()
+            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
     def write(self, s):
         time.sleep(0.1)
@@ -589,7 +593,14 @@ class Proc:
 
     def read(self, size):
         if isinstance(self.p, Popen):
-            return self.p.stdout.read(size)
+            while True:
+                try:
+                    return self.p.stdout.read(size)
+                except IOError as (errno, strerror):
+                    if errno == 11:  # Resource temporarily unavailable
+                        time.sleep(1e-3)
+                    else:
+                        raise
         else:
             return self.p.recv(size)
 
