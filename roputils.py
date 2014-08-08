@@ -575,10 +575,12 @@ class FormatStr:
         # x86 only
         self.offset = offset
 
-    def dump_stack(self, size):
+    def dump_stack(self, size, start=1):
         buf = 'AAAA'
+        i = start
         while len(buf) < size:
-            buf += '.%08x'
+            buf += ".%%%d$08x" % i
+            i += 1
         return buf[:size]
 
     def gets(self, addr):
