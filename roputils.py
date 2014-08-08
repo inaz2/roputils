@@ -587,16 +587,18 @@ class FormatStr:
         return buf
 
     def write4(self, addr, value):
-        buf = struct.pack('<III', addr, addr+1, addr+3)
+        buf = struct.pack('<IIII', addr, addr+1, addr+2, addr+3)
 
-        n = struct.unpack('<BHB', struct.pack('<I', value))
+        n = map(ord, struct.pack('<I', value))
+        n[3] = ((n[3]-n[2]-1) % 0x100) + 1
         n[2] = ((n[2]-n[1]-1) % 0x100) + 1
-        n[1] = ((n[1]-n[0]-1) % 0x10000) + 1
+        n[1] = ((n[1]-n[0]-1) % 0x100) + 1
         n[0] = ((n[0]-len(buf)-1) % 0x100) + 1
 
         buf += '%%%dc%%%d$hhn' % (n[0], self.offset)
-        buf += '%%%dc%%%d$hn' % (n[1], self.offset+1)
-        buf += '%%%dc%%%d$hhn' % (n[2], self.offset+3)
+        buf += '%%%dc%%%d$hhn' % (n[1], self.offset+1)
+        buf += '%%%dc%%%d$hhn' % (n[2], self.offset+2)
+        buf += '%%%dc%%%d$hhn' % (n[3], self.offset+3)
 
         return buf
 
