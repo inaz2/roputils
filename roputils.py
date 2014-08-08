@@ -7,6 +7,7 @@ import struct
 import socket
 import time
 import fcntl
+import errno
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
 
@@ -622,27 +623,34 @@ class Proc:
             while True:
                 try:
                     return self.p.stdout.read(size)
-                except IOError as (errno, strerror):
-                    if errno == 11:  # Resource temporarily unavailable
+                except IOError as e:
+                    if e.errno == errno.EAGAIN:  # Resource temporarily unavailable
                         time.sleep(1e-3)
                     else:
                         raise
         else:
             return self.p.recv(size)
 
-    def wait(self):
+    def interact(self):
         if isinstance(self.p, Popen):
+            while True:
+                buf = self.read(1024)
+                sys.stdout.write(buf)
+                if len(buf) < 1024:
+                    break
+            try:
+                self.write('exec /bin/sh <&2 >&2\n')
+            except IOError as e:
+                if e.errno == errno.EPIPE:  # Broken pipe
+                    return
+                else:
+                    raise
             self.p.wait()
         else:
             t = Telnet()
             t.sock = self.p
             t.interact()
             t.close()
-
-    def interact(self):
-        if isinstance(self.p, Popen):
-            self.write('exec /bin/sh <&2 >&2\n')
-        self.wait()
 
     def close(self):
         if isinstance(self.p, Popen):

