@@ -7,6 +7,7 @@ import struct
 import socket
 import time
 import fcntl
+import select
 import errno
 import random
 from telnetlib import Telnet
@@ -640,14 +641,11 @@ class Proc:
 
     def read(self, size):
         if isinstance(self.p, Popen):
-            while True:
-                try:
-                    return self.p.stdout.read(size)
-                except IOError as e:
-                    if e.errno == errno.EAGAIN:  # Resource temporarily unavailable
-                        time.sleep(1e-3)
-                    else:
-                        raise
+            rlist, wlist, xlist = select.select([self.p.stdout], [], [], 0.1)
+            if rlist:
+                return self.p.stdout.read(size)
+            else:
+                return ''
         else:
             return self.p.recv(size)
 
