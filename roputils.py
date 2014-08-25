@@ -346,7 +346,7 @@ class ROP(ELF):
     def call_plt(self, name, *args):
         return self.call(self.plt(name), *args)
 
-    def call_chain_ptr(self, *calls):
+    def call_chain_ptr(self, *calls, **kwargs):
         if self.wordsize != 8:
             raise Exception('support x86-64 only')
 
@@ -374,14 +374,21 @@ class ROP(ELF):
             buf += self.junk(3-len(args))
             buf += p64(call_r12)
 
-        buf += p64(0) * 7
+        buf += self.junk()
+        if 'pivot' in kwargs:
+            buf += p64(0)
+            buf += p64(kwargs['pivot'])
+            buf += p64(0) * 4
+            buf += p64(self.gadget('leave'))
+        else:
+            buf += p64(0) * 6
         return buf
 
-    def call_chain_plt(self, *calls):
+    def call_chain_plt(self, *calls, **kwargs):
         ary = []
         for call in calls:
             ary.append([self.got(call[0])] + call[1:])
-        return self.call_chain_ptr(*ary)
+        return self.call_chain_ptr(*ary, **kwargs)
 
     def dl_resolve(self, base, name, *args, **kwargs):
         def align(x, origin=0, size=0):
