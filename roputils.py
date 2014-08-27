@@ -322,7 +322,6 @@ class ELF:
                 print "\033[31m%s\033[m" % keyword,
         print
 
-
 class ROP(ELF):
     def call(self, addr, *args):
         if len(args) > 4:
@@ -351,35 +350,34 @@ class ROP(ELF):
             raise Exception('support x86-64 only')
 
         chunk_candidates = [
-            ('\x4c\x89\xfa\x4c\x89\xf6\x44\x89\xef\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x75\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3'),
-            ('\x4c\x89\xfa\x4c\x89\xf6\x44\x89\xef\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x72\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3'),
+            ('\x4c\x89\xfa\x4c\x89\xf6\x44\x89\xef\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x75\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3', False),
+            ('\x4c\x89\xfa\x4c\x89\xf6\x44\x89\xef\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x72\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3', False),
+            ('\x4c\x89\xea\x4c\x89\xf6\x44\x89\xff\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x75\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3', True),
         ]
 
-        for chunk1, chunk2 in chunk_candidates:
+        for chunk1, chunk2, _args_reversed in chunk_candidates:
             try:
                 set_regs = self.gadget(chunk2)
                 call_r12 = self.gadget(chunk1 + chunk2)
+                args_reversed = _args_reversed
                 break
             except ValueError:
                 pass
 
-        args = calls[0]
-        ptr = args.pop(0)
         buf = p64(set_regs)
-        buf += self.junk()
-        buf += p64(0) + p64(1) + p64(ptr)
-        for arg in args:
-            buf += p64(arg)
-        buf += self.junk(3-len(args))
-        buf += p64(call_r12)
 
-        for args in calls[1:]:
+        for args in calls:
             ptr = args.pop(0)
             buf += self.junk()
             buf += p64(0) + p64(1) + p64(ptr)
-            for arg in args:
-                buf += p64(arg)
-            buf += self.junk(3-len(args))
+            if not args_reversed:
+                for arg in args:
+                    buf += p64(arg)
+                buf += self.junk(3-len(args))
+            else:
+                buf += self.junk(3-len(args))
+                for arg in reversed(args):
+                    buf += p64(arg)
             buf += p64(call_r12)
 
         buf += self.junk()
