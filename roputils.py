@@ -495,10 +495,7 @@ class ROP(ELF):
     def fill(self, size, buf=''):
         chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         buflen = size - len(buf)
-        buf = bytearray()
-        while len(buf) < buflen:
-            buf += random.choice(chars)
-        return buf[:buflen]
+        return ''.join(random.choice(chars) for i in xrange(buflen))
 
 
 class Shellcode:
