@@ -1,3 +1,8 @@
+/*
+    compile:
+    $ gcc -fno-stack-protector -o bof bof.c
+*/
+
 #include <unistd.h>
 
 int main()
