@@ -10,6 +10,7 @@ import fcntl
 import select
 import errno
 import random
+import signal
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
 
@@ -638,6 +639,8 @@ class FormatStr:
 
 class Proc:
     def __init__(self, *args, **kwargs):
+        if kwargs.get('debug'):
+            os.kill(os.getpid(), signal.SIGTRAP)
         if 'host' in kwargs and 'port' in kwargs:
             self.p = socket.create_connection((kwargs['host'], kwargs['port']))
         else:

@@ -10,14 +10,14 @@ A Return-oriented Programming toolkit
 
 Currently roputils.py has 5 classes: ELF, ROP, Shellcode, FormatStr, Proc, Pattern.
 
-* ELF: information of ELF object by using objdump
+* ELF: information about ELF object retrieved by objdump
 * ROP: subclass of ELF, with additional methods for creating ROP stack
 * Shellcode: x86 and x64 shellcode builder
-* FormatStr: create format string for exploiting
+* FormatStr: create format string for exploitation
 * Proc: gateway interface of subprocess and socket
 * Pattern: create Metasploit pattern and calculate its offset
 
-roputils.py also can be used in the command line, has 4 subcommands: checksec, create, offset, gadget.
+roputils.py also can be used as CLI tool, has 4 subcommands: checksec, create, offset, gadget.
 
 * checksec: a clone of [checksec.sh](http://www.trapkit.de/tools/checksec.html)
 * create: call Pattern.create()
