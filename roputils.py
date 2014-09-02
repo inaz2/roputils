@@ -404,7 +404,7 @@ class ROP(ELF):
         buf += self.junk()
         if 'pivot' in kwargs:
             buf += p64(0)
-            buf += p64(kwargs['pivot'])
+            buf += p64(kwargs['pivot'] - self.wordsize)
             buf += p64(0) * 4
             buf += p64(self.gadget('leave'))
         else:
