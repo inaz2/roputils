@@ -37,109 +37,125 @@ class ELF:
         if not os.path.exists(fpath):
             raise Exception("file not found: %r" % fpath)
 
-        self._dynamic = {}
         self._section = {}
-        p = Popen(['objdump', '-x', fpath], stdout=PIPE)
-        line = ''
-        while True:  # read ELF header
-            line = p.stdout.readline()
-            if line == 'Program Header:\n':
-                break
-            if 'DYNAMIC' in line:
-                self.sec['pie'] = True
-            field = line.split()
-            if len(field) != 4:
-                continue
-            if field[2] != 'format':
-                continue
-            if field[3] == 'elf64-x86-64':
-                self.wordsize = 8
-            elif field[3] == 'elf32-i386':
-                self.wordsize = 4
-            else:
-                raise Exception('unsupported format: %s' % field[3])
-        while True:  # read Program Header
-            line = p.stdout.readline()
-            field = line.split()
-            line = p.stdout.readline()
-            if line == 'Dynamic Section:\n':
-                break
-            field.extend(line.split())
-            if len(field) != 15:
-                continue
-            name, offset, vaddr, filesz, flag = field[0], int(field[2], 16), int(field[4], 16), int(field[10], 16), field[14]
-            if name == 'RELRO':
-                self.sec['relro'] = True
-            elif name == 'STACK':
-                if not 'x' in flag:
-                    self.sec['nx'] = True
-            elif name == 'LOAD':
-                if not 'x' in flag:
-                    continue
-                with open(fpath, 'rb') as f:
-                    f.seek(offset)
-                    blob = f.read(filesz)
-                self.xmem = (vaddr, blob)
-        while True:  # read Dynamic Section
-            line = p.stdout.readline()
-            if line == 'Sections:\n':
-                break
-            field = line.split()
-            if len(field) != 2:
-                continue
-            if field[1].endswith(':'):
-                continue
-            name, value = field[0], field[1]
-            if name in ('NEEDED', 'SONAME'):
-                ary = self._dynamic.setdefault(name, [])
-                ary.append(value)
-            else:
-                self._dynamic[name] = int(value, 16)
-                if name == 'BIND_NOW':
-                    self.sec['bind_now'] = True
-                elif name == 'RPATH':
-                    self.sec['rpath'] = True
-                elif name == 'RUNPATH':
-                    self.sec['runpath'] = True
-                elif name == 'DEBUG':
-                    self.sec['dt_debug'] = True
-        while True:  # read Sections
-            line = p.stdout.readline()
-            if line == 'SYMBOL TABLE:\n':
-                break
-            field = line.split()
-            if len(field) != 7:
-                continue
-            name, addr = field[1], int(field[3], 16)
-            self._section[name] = addr
-        p.terminate()
-
+        self._dynamic = {}
         self._got = {}
         self._plt = {}
-        idx = 0
-        p = Popen(['objdump', '-R', fpath], stdout=PIPE)
-        for line in p.stdout:
-            field = line.split()
-            if len(field) != 3:
+        self._symbol = {}
+        plt_index = 0
+
+        p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
+        while True:  # read ELF Header
+            line = p.stdout.readline()
+            if line == 'Section Headers:\n':
+                p.stdout.readline()
+                break
+            fields = [x.strip() for x in line.split(':')]
+            if fields[0] == 'Class':
+                if fields[1] == 'ELF64':
+                    self.wordsize = 8
+                elif fields[1] == 'ELF32':
+                    self.wordsize = 4
+                else:
+                    raise Exception('unsupported ELF class: %s' % fields[1])
+            elif fields[0] == 'Type':
+                if fields[1] == 'DYN (Shared object file)':
+                    self.sec['pie'] = True
+        while True:  # read Section Headers
+            line = p.stdout.readline()
+            if line == 'Key to Flags:\n':
+                break
+            fields = [x.strip() for x in line[7:].split()]
+            if len(fields) != 10:
                 continue
-            if not 'JUMP_SLOT' in field[1]:
+            name, addr = fields[0], int(fields[2], 16)
+            self._section[name] = addr
+        while True:
+            line = p.stdout.readline()
+            if line == 'Program Headers:\n':
+                p.stdout.readline()
+                break
+        while True:  # read Program Headers
+            line = p.stdout.readline()
+            if line == '\n':
+                break
+            fields = [x.strip() for x in line.split(None, 6)]
+            if len(fields) != 7:
                 continue
-            name, addr = field[2], int(field[0], 16)
-            self._got[name] = addr
-            self._plt[name] = self._section['.plt'] + 0x10*(idx+1)
+            type_, offset, virtaddr, filesiz, flg = fields[0], int(fields[1], 16), int(fields[2], 16), int(fields[4], 16), fields[6]
+            if type_ == 'GNU_RELRO':
+                self.sec['relro'] = True
+            elif type_ == 'GNU_STACK':
+                if not 'E' in flg:
+                    self.sec['nx'] = True
+            elif type_ == 'LOAD':
+                if 'E' in flg:
+                    with open(fpath, 'rb') as f:
+                        f.seek(offset)
+                        blob = f.read(filesiz)
+                    self.xmem = (virtaddr, blob)
+        while True:
+            line = p.stdout.readline()
+            if line.startswith('Dynamic section'):
+                p.stdout.readline()
+                break
+        while True:  # read Dynamic section
+            line = p.stdout.readline()
+            if line == '\n':
+                break
+            if '(BIND_NOW)' in line:
+                self.sec['bind_now'] = True
+            elif '(RPATH)' in line:
+                self.sec['rpath'] = True
+            elif '(RUNPATH)' in line:
+                self.sec['runpath'] = True
+            elif '(DEBUG)' in line:
+                self.sec['dt_debug'] = True
+            fields = [x.strip() for x in line.split(None, 2)]
+            if len(fields) != 3:
+                continue
+            type_, value = fields[1][1:-1], fields[2]
+            if value.startswith('0x'):
+                self._dynamic[type_] = int(value, 16)
+            elif ' (bytes)' in value:
+                value = value.replace(' (bytes)', '')
+                self._dynamic[type_] = int(value)
+        while True:
+            line = p.stdout.readline()
+            if line.startswith('Relocation section') and '.plt' in line:
+                p.stdout.readline()
+                break
+        while True:  # read Relocation section (.rela?.plt)
+            line = p.stdout.readline()
+            if line == '\n':
+                break
+            fields = [x.strip() for x in line.split()]
+            if len(fields) < 5:
+                continue
+            if not 'JUMP_SLOT' in fields[2]:
+                continue
+            offset, name = int(fields[0], 16), fields[4]
+            self._got[name] = offset
+            self._plt[name] = self._section['.plt'] + 0x10*(plt_index+1)
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
-            idx += 1
-        p.terminate()
-
-        self._symbol = {}
-        p = Popen(['objdump', '-T', fpath], stdout=PIPE)
-        for line in p.stdout:
-            field = line.split()
-            if len(field) != 7:
+            plt_index += 1
+        while True:
+            line = p.stdout.readline()
+            if line.startswith('Symbol table') and '.dynsym' in line:
+                p.stdout.readline()
+                break
+        while True:  # read Symbol table (.dynsym)
+            line = p.stdout.readline()
+            if line == '\n':
+                break
+            fields = [x.strip() for x in line.split()]
+            if len(fields) != 8:
                 continue
-            name, addr = field[6], int(field[0], 16)
-            self._symbol[name] = addr
+            name, value = fields[7], int(fields[1], 16)
+            if '@@' in name:
+                name = name.split('@@')[0]
+                self._symbol[name] = value
         p.terminate()
 
         self._string = {}
