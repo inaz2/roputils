@@ -42,47 +42,39 @@ class ELF:
         self._got = {}
         self._plt = {}
         self._symbol = {}
-        plt_index = 0
+        plt_index = 1
 
         p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
-        while True:  # read ELF Header
+        line = ''
+        while line != 'Section Headers:\n':  # read ELF Header
             line = p.stdout.readline()
-            if line == 'Section Headers:\n':
-                p.stdout.readline()
-                break
-            fields = [x.strip() for x in line.split(':')]
-            if fields[0] == 'Class':
-                if fields[1] == 'ELF64':
+            m = re.search(r'^\s*(?P<key>[^:]+):\s+(?P<value>.+)$', line)
+            if not m:
+                continue
+            key, value = m.group('key'), m.group('value')
+            if key == 'Class':
+                if value == 'ELF64':
                     self.wordsize = 8
-                elif fields[1] == 'ELF32':
+                elif value == 'ELF32':
                     self.wordsize = 4
                 else:
-                    raise Exception('unsupported ELF class: %s' % fields[1])
-            elif fields[0] == 'Type':
-                if fields[1] == 'DYN (Shared object file)':
+                    raise Exception('unsupported ELF class: %s' % value)
+            elif key == 'Type':
+                if value == 'DYN (Shared object file)':
                     self.sec['pie'] = True
-        while True:  # read Section Headers
+        while line != 'Program Headers:\n':  # read Section Headers
             line = p.stdout.readline()
-            if line == 'Key to Flags:\n':
-                break
-            fields = [x.strip() for x in line[7:].split()]
-            if len(fields) != 10:
+            m = re.search(r'^\s*\[(?P<Nr>[^\]]+)\]\s+(?P<Name>\S+)\s+(?P<Type>\S+)\s+(?P<Address>\S+)\s+(?P<Off>\S+)\s+(?P<Size>\S+)\s+(?P<ES>\S+)\s+(?P<Flg>\S+)\s+(?P<Lk>\S+)\s+(?P<Inf>\S+)\s+(?P<Al>\S+)$', line)
+            if not m or m.group('Nr') == 'Nr':
                 continue
-            name, addr = fields[0], int(fields[2], 16)
-            self._section[name] = addr
-        while True:
+            name, address = m.group('Name'), int(m.group('Address'), 16)
+            self._section[name] = address
+        while not line.startswith('Dynamic section'):  # read Program Headers
             line = p.stdout.readline()
-            if line == 'Program Headers:\n':
-                p.stdout.readline()
-                break
-        while True:  # read Program Headers
-            line = p.stdout.readline()
-            if line == '\n':
-                break
-            fields = [x.strip() for x in line.split(None, 6)]
-            if len(fields) != 7:
+            m = re.search(r'^\s*(?P<Type>\S+)\s+(?P<Offset>\S+)\s+(?P<VirtAddr>\S+)\s+(?P<PhysAddr>\S+)\s+(?P<FileSiz>\S+)\s+(?P<MemSiz>\S+)\s+(?P<Flg>.{3})\s+(?P<Align>\S+)$', line)
+            if not m or m.group('Type') == 'Type':
                 continue
-            type_, offset, virtaddr, filesiz, flg = fields[0], int(fields[1], 16), int(fields[2], 16), int(fields[4], 16), fields[6]
+            type_, offset, virtaddr, filesiz, flg = m.group('Type'), int(m.group('Offset'), 16), int(m.group('VirtAddr'), 16), int(m.group('FileSiz'), 16), m.group('Flg')
             if type_ == 'GNU_RELRO':
                 self.sec['relro'] = True
             elif type_ == 'GNU_STACK':
@@ -94,65 +86,43 @@ class ELF:
                         f.seek(offset)
                         blob = f.read(filesiz)
                     self.xmem = (virtaddr, blob)
-        while True:
+        while not (line.startswith('Relocation section') and '.plt' in line):  # read Dynamic section
             line = p.stdout.readline()
-            if line.startswith('Dynamic section'):
-                p.stdout.readline()
-                break
-        while True:  # read Dynamic section
-            line = p.stdout.readline()
-            if line == '\n':
-                break
-            if '(BIND_NOW)' in line:
-                self.sec['bind_now'] = True
-            elif '(RPATH)' in line:
-                self.sec['rpath'] = True
-            elif '(RUNPATH)' in line:
-                self.sec['runpath'] = True
-            elif '(DEBUG)' in line:
-                self.sec['dt_debug'] = True
-            fields = [x.strip() for x in line.split(None, 2)]
-            if len(fields) != 3:
+            m = re.search(r'^\s*(?P<Tag>\S+)\s+\((?P<Type>[^)]+)\)\s+(?P<Value>.+)$', line)
+            if not m or m.group('Tag') == 'Tag':
                 continue
-            type_, value = fields[1][1:-1], fields[2]
+            type_, value = m.group('Type'), m.group('Value')
+            if type_ == 'BIND_NOW':
+                self.sec['bind_now'] = True
+            elif type_ == 'RPATH':
+                self.sec['rpath'] = True
+            elif type_ == 'RUNPATH':
+                self.sec['runpath'] = True
+            elif type_ == 'DEBUG':
+                self.sec['dt_debug'] = True
             if value.startswith('0x'):
                 self._dynamic[type_] = int(value, 16)
-            elif ' (bytes)' in value:
-                value = value.replace(' (bytes)', '')
-                self._dynamic[type_] = int(value)
-        while True:
+            elif value.endswith(' (bytes)'):
+                self._dynamic[type_] = int(value.split()[0])
+        while not (line.startswith('Symbol table') and '.dynsym' in line):  # read Relocation section (.rel.plt/.rela.plt)
             line = p.stdout.readline()
-            if line.startswith('Relocation section') and '.plt' in line:
-                p.stdout.readline()
-                break
-        while True:  # read Relocation section (.rela?.plt)
-            line = p.stdout.readline()
-            if line == '\n':
-                break
-            fields = [x.strip() for x in line.split()]
-            if len(fields) < 5:
+            m = re.search(r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$', line)
+            if not m or m.group('Offset') == 'Offset':
                 continue
-            if not 'JUMP_SLOT' in fields[2]:
+            offset, type_, name = int(m.group('Offset'), 16), m.group('Type'), m.group('Name')
+            if not 'JUMP_SLOT' in type_:
                 continue
-            offset, name = int(fields[0], 16), fields[4]
             self._got[name] = offset
-            self._plt[name] = self._section['.plt'] + 0x10*(plt_index+1)
+            self._plt[name] = self._section['.plt'] + 0x10*plt_index
+            plt_index += 1
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
-            plt_index += 1
-        while True:
+        while line != '\n':  # read Symbol table (.dynsym)
             line = p.stdout.readline()
-            if line.startswith('Symbol table') and '.dynsym' in line:
-                p.stdout.readline()
-                break
-        while True:  # read Symbol table (.dynsym)
-            line = p.stdout.readline()
-            if line == '\n':
-                break
-            fields = [x.strip() for x in line.split()]
-            if len(fields) != 8:
+            m = re.search(r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>.+)$', line)
+            if not m or m.group('Num') == 'Num':
                 continue
-            name, value = fields[7], int(fields[1], 16)
+            name, value = m.group('Name'), int(m.group('Value'), 16)
             if '@@' in name:
                 name = name.split('@@')[0]
                 self._symbol[name] = value
