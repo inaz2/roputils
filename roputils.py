@@ -104,28 +104,31 @@ class ELF:
                 self._dynamic[type_] = int(value, 16)
             elif value.endswith(' (bytes)'):
                 self._dynamic[type_] = int(value.split()[0])
-        while not (line.startswith('Symbol table') and '.dynsym' in line):  # read Relocation section (.rel.plt/.rela.plt)
+        while not line.startswith('Symbol table'):  # read Relocation section (.rel.plt/.rela.plt)
             line = p.stdout.readline()
             m = re.search(r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$', line)
             if not m or m.group('Offset') == 'Offset':
                 continue
             offset, type_, name = int(m.group('Offset'), 16), m.group('Type'), m.group('Name')
-            if not 'JUMP_SLOT' in type_:
+            if not type_.endswith('JUMP_SLOT'):
                 continue
             self._got[name] = offset
             self._plt[name] = self._section['.plt'] + 0x10*plt_index
             plt_index += 1
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
-        while line != '\n':  # read Symbol table (.dynsym)
+        while line and not line.startswith('Version symbols section'):  # read Symbol table
             line = p.stdout.readline()
-            m = re.search(r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>.+)$', line)
+            m = re.search(r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>\S+)', line)
             if not m or m.group('Num') == 'Num':
                 continue
+            if m.group('Ndx') == 'UND':
+                continue
             name, value = m.group('Name'), int(m.group('Value'), 16)
+            self._symbol[name] = value
             if '@@' in name:
-                name = name.split('@@')[0]
-                self._symbol[name] = value
+                default_name = name.split('@@')[0]
+                self._symbol[default_name] = value
         p.terminate()
 
         self._string = {}
