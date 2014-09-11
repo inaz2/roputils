@@ -655,13 +655,19 @@ class Proc:
         else:
             return self.p.recv(size)
 
+    def read_all(self, chunk_size=8192):
+        buf = ''
+        while True:
+            chunk = self.read(chunk_size)
+            buf += chunk
+            if len(chunk) < chunk_size:
+                break
+        return buf
+
     def interact(self):
         if isinstance(self.p, Popen):
-            while True:
-                buf = self.read(1024)
-                sys.stdout.write(buf)
-                if len(buf) < 1024:
-                    break
+            buf = self.read_all()
+            sys.stdout.write(buf)
             try:
                 self.write('exec /bin/sh <&2 >&2\n')
             except IOError as e:
