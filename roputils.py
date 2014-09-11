@@ -181,42 +181,72 @@ class ELF:
             addr, blob = self.xmem
             addr += self.base
 
-        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi']
+        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
         if reg:
-            if not (len(reg) == 3 and reg[0] in ('r', 'e')):
+            try:
+                r = regs.index('r'+reg[1:])
+            except ValueError:
                 raise Exception("unexpected register: %r" % reg)
-            r = regs.index('r'+reg[1:])
         else:
-            r = 4
+            r = regs.index('rsp')
 
         if keyword == 'pop':
             if reg:
-                chunk = chr(0x58+r) + '\xc3'
+                if r >= 8:
+                    chunk = '\x41' + chr(0x58+(r-8)) + '\xc3'
+                else:
+                    chunk = chr(0x58+r) + '\xc3'
                 return addr + blob.index(chunk)
             else:
                 # skip rsp
                 m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % n, blob)
                 return addr + m.start()
         elif keyword == 'jmp':
-            chunk = '\xff' + chr(0xe0+r)
+            if r >= 8:
+                chunk = '\x41\xff' + chr(0xe0+(r-8))
+            else:
+                chunk = '\xff' + chr(0xe0+r)
             return addr + blob.index(chunk)
         elif keyword == 'call':
-            chunk = '\xff' + chr(0xd0+r)
+            if r >= 8:
+                chunk = '\x41\xff' + chr(0xd0+(r-8))
+            else:
+                chunk = '\xff' + chr(0xd0+r)
             return addr + blob.index(chunk)
         elif keyword == 'push':
-            chunk = chr(0x50+r) + '\xc3'
+            if r >= 8:
+                chunk = '\x41' + chr(0x50+(r-8)) + '\xc3'
+            else:
+                chunk = chr(0x50+r) + '\xc3'
             return addr + blob.index(chunk)
         elif keyword == 'pivot':
+            # TODO: support rax-rdi, r8-r15
             # xchg reg, esp
             if r == 0:
-                return addr + blob.index('\x94\xc3')
+                if reg[0] == 'r':
+                    return addr + blob.index('\x48\x94\xc3')
+                else:
+                    return addr + blob.index('\x94\xc3')
             else:
-                chunk = '\x87' + chr(0xe0+r) + '\xc3'
+                if reg[0] == 'r':
+                    if r >= 8:
+                        chunk = '\x49\x87' + chr(0xe0+(r-8)) + '\xc3'
+                    else:
+                        chunk = '\x48\x87' + chr(0xe0+r) + '\xc3'
+                else:
+                    chunk = '\x87' + chr(0xe0+r) + '\xc3'
                 try:
                     return addr + blob.index(chunk)
                 except ValueError:
                     pass
-                chunk = '\x87' + chr(0xc4+8*r) + '\xc3'
+
+                if reg[0] == 'r':
+                    if r >= 8:
+                        chunk = '\x4c\x87' + chr(0xc4+8*(r-8)) + '\xc3'
+                    else:
+                        chunk = '\x48\x87' + chr(0xc4+8*r) + '\xc3'
+                else:
+                    chunk = '\x87' + chr(0xc4+8*r) + '\xc3'
                 return addr + blob.index(chunk)
         elif keyword == 'pushad':
             # x86 only
@@ -282,7 +312,7 @@ class ELF:
         print ''.join(ary)
 
     def list_gadgets(self):
-        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi']
+        regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
 
         print "%8s" % 'pop',
         for i in range(6):
@@ -460,15 +490,21 @@ class ROP(ELF):
         xmem = (addr, data)
 
         if self.wordsize == 8:
-            arg_regs = ['rdi', 'rsi', 'rdx', 'rcx']
-
+            arg_regs = ['rdi', 'rsi', 'rdx', 'r10', 'r8', 'r9']
             buf = self.p(self.gadget('pop', 'rax', xmem=xmem)) + self.p(number)
-            for i, arg in enumerate(args):
-                buf += self.p(self.gadget('pop', arg_regs[i], xmem=xmem)) + self.p(arg)
+            for arg_reg, arg in zip(arg_regs, args):
+                buf += self.p(self.gadget('pop', arg_reg, xmem=xmem)) + self.p(arg)
             buf += self.p(self.gadget('syscall', xmem=xmem))
         else:
-            args = list(args) + [0] * (6-len(args))
-            buf = self.p(self.gadget('popad', xmem=xmem)) + struct.pack('<IIIIIIII', args[4], args[3], args[5], 0, args[0], args[2], args[1], number)
+            try:
+                # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
+                args = list(args) + [0] * (6-len(args))
+                buf = self.p(self.gadget('popad', xmem=xmem)) + struct.pack('<IIIIIIII', args[4], args[3], args[5], 0, args[0], args[2], args[1], number)
+            except ValueError:
+                arg_regs = ['ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp']
+                buf = self.p(self.gadget('pop', 'eax', xmem=xmem)) + self.p(number)
+                for arg_reg, arg in zip(arg_regs, args):
+                    buf += self.p(self.gadget('pop', arg_reg, xmem=xmem)) + self.p(arg)
             buf += self.p(self.gadget('int0x80', xmem=xmem))
         return buf
 
