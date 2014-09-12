@@ -130,6 +130,7 @@ class ELF:
                 default_name = name.split('@@')[0]
                 self._symbol[default_name] = value
         p.terminate()
+        p.wait()
 
         self._string = {}
         p = Popen(['strings', '-tx', fpath], stdout=PIPE)
@@ -140,6 +141,7 @@ class ELF:
             name, addr = field[1], int(field[0], 16)
             self._string[name] = addr
         p.terminate()
+        p.wait()
 
     def p(self, x):
         if self.wordsize == 8:
@@ -724,6 +726,7 @@ class Proc:
     def close(self):
         if isinstance(self.p, Popen):
             self.p.terminate()
+            self.p.wait()
         else:
             self.p.close()
 
