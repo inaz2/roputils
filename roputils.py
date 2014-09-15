@@ -705,6 +705,7 @@ class Proc:
 
         if 'host' in kwargs and 'port' in kwargs:
             self.p = socket.create_connection((kwargs['host'], kwargs['port']))
+            self.p.setblocking(0)
         else:
             self.p = Popen(args, stdin=PIPE, stdout=PIPE)
             fd = self.p.stdout.fileno()
@@ -714,19 +715,35 @@ class Proc:
     def write(self, s, interval=0.1):
         time.sleep(interval)
         if isinstance(self.p, Popen):
+            select.select([], [self.p.stdin], [])
             return self.p.stdin.write(s)
         else:
+            select.select([], [self.p], [])
             return self.p.sendall(s)
 
     def read(self, size, timeout=0.1):
+        buf = ''
         if isinstance(self.p, Popen):
-            rlist, wlist, xlist = select.select([self.p.stdout], [], [], timeout)
-            if rlist:
-                return self.p.stdout.read(size)
-            else:
-                return ''
+            while len(buf) < size:
+                rlist, wlist, xlist = select.select([self.p.stdout], [], [], timeout)
+                if rlist:
+                    chunk = self.p.stdout.read(size-len(buf))
+                    if not chunk:
+                        break
+                    buf += chunk
+                else:
+                    break
         else:
-            return self.p.recv(size)
+            while len(buf) < size:
+                rlist, wlist, xlist = select.select([self.p], [], [], timeout)
+                if rlist:
+                    chunk = self.p.recv(size-len(buf))
+                    if not chunk:
+                        break
+                    buf += chunk
+                else:
+                    break
+        return buf
 
     def read_all(self, chunk_size=8192):
         buf = ''
