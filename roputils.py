@@ -774,17 +774,22 @@ class Pattern:
             raise Exception("size too large")
 
     @classmethod
-    def offset(cls, addr):
-        if addr >> 32:
-            chunk = p64(addr)
+    def offset(cls, s):
+        m = re.search(r'^(?:[0-9A-F]+|[0-9a-f]+)$', s)
+        if m:
+            addr = int(s, 16)
+            if addr >> 32:
+                chunk = p64(addr)
+            else:
+                chunk = p32(addr)
         else:
-            chunk = p32(addr)
+            chunk = s
 
-        s = ''
+        buf = ''
         for x in cls.generate():
-            s += x
-            if chunk in s:
-                return s.index(chunk)
+            buf += x
+            if chunk in buf:
+                return buf.index(chunk)
         else:
             raise Exception("pattern not found")
 
@@ -802,10 +807,9 @@ if __name__ == '__main__':
         print Pattern.create(size)
     elif cmd == 'offset':
         if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: python %s offset ADDRESS" % sys.argv[0]
+            print >>sys.stderr, "Usage: python %s offset [ADDRESS|STRING]" % sys.argv[0]
             sys.exit(1)
-        addr = int(sys.argv[2], 16)
-        print Pattern.offset(addr)
+        print Pattern.offset(sys.argv[2])
     elif cmd == 'gadget':
         fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
         ELF(fpath).list_gadgets()
