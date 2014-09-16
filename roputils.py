@@ -11,6 +11,7 @@ import select
 import errno
 import random
 import signal
+import tempfile
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
 
@@ -354,7 +355,7 @@ class ELF:
                 break
 
             addr = self.xmem[0] + i
-            p = Popen(['objdump', '-M', 'intel', '-D', '--start-address='+str(addr), self.fpath], stdout=PIPE)
+            p = Popen(['objdump', '-w', '-M', 'intel', '-D', '--start-address='+str(addr), self.fpath], stdout=PIPE)
             stdout, stderr = p.communicate()
 
             print
@@ -817,9 +818,43 @@ class Pattern:
             raise Exception("pattern not found")
 
 
+class Asm:
+    @classmethod
+    def assemble(cls, s):
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.flush()
+            p = Popen(['as', '--msyntax=intel', '--mnaked-reg', '-o', f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            stdout, stderr = p.communicate(s+'\n')
+            if stderr:
+                sys.stderr.write(stderr)
+                return
+            p = Popen(['objdump', '-w', '-M', 'intel', '-d', f.name], stdout=PIPE)
+            stdout, stderr = p.communicate()
+            for line in stdout.splitlines()[7:]:
+                print line
+            os.remove(f.name)
+
+    @classmethod
+    def disassemble(cls, chunk, arch):
+        if arch == 'i386':
+            (machine, options) = ('i386', 'intel')
+        elif arch == 'x86-64':
+            (machine, options) = ('i386', 'intel,x86-64')
+        else:
+            raise Exception('unsupported architecture')
+
+        with tempfile.NamedTemporaryFile() as f:
+            f.write(chunk)
+            f.flush()
+            p = Popen(['objdump', '-w', '-b', 'binary', '-m', machine, '-M', options, '-D', f.name], stdout=PIPE)
+            stdout, stderr = p.communicate()
+            for line in stdout.splitlines()[7:]:
+                print line
+
+
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >>sys.stderr, "Usage: python %s [checksec|create|offset|gadget|scan] ..." % sys.argv[0]
+        print >>sys.stderr, "Usage: python %s [checksec|create|offset|gadget|scan|asm] ..." % sys.argv[0]
         sys.exit(1)
     cmd = sys.argv[1]
     if cmd == 'checksec':
@@ -843,3 +878,12 @@ if __name__ == '__main__':
         chunk = sys.argv[2].replace(' ', '').decode('hex')
         fpath = sys.argv[3] if len(sys.argv) > 3 else 'a.out'
         ELF(fpath).scan_gadgets(chunk)
+    elif cmd == 'asm':
+        if len(sys.argv) < 3 or (sys.argv[2] == '-d' and len(sys.argv) < 5):
+            print >>sys.stderr, "Usage: python %s asm (ASM | -d (i386|x86-64) HEX_LIST)" % sys.argv[0]
+            sys.exit(1)
+        if sys.argv[2] == '-d':
+            chunk = sys.argv[4].replace(' ', '').decode('hex')
+            Asm.disassemble(chunk, sys.argv[3])
+        else:
+            Asm.assemble(sys.argv[2])
