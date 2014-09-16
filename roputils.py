@@ -344,6 +344,29 @@ class ELF:
                 print "\033[31m%s\033[m" % keyword,
         print
 
+    def scan_gadgets(self, chunk):
+        i = 0
+        while True:
+            buf = self.xmem[1][i:]
+            try:
+                i += buf.index(chunk)
+            except ValueError:
+                break
+
+            addr = self.xmem[0] + i
+            p = Popen(['objdump', '-M', 'intel', '-D', '--start-address='+str(addr), self.fpath], stdout=PIPE)
+            stdout, stderr = p.communicate()
+
+            print
+            for line in stdout.splitlines()[6:]:
+                if not line:
+                    break
+                print line
+                if '(bad)' in line:
+                    break
+
+            i += 1
+
 
 class ROP(ELF):
     def call(self, addr, *args):
@@ -796,7 +819,7 @@ class Pattern:
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >>sys.stderr, "Usage: python %s [checksec|create|offset|gadget] ..." % sys.argv[0]
+        print >>sys.stderr, "Usage: python %s [checksec|create|offset|gadget|scan] ..." % sys.argv[0]
         sys.exit(1)
     cmd = sys.argv[1]
     if cmd == 'checksec':
@@ -813,3 +836,10 @@ if __name__ == '__main__':
     elif cmd == 'gadget':
         fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
         ELF(fpath).list_gadgets()
+    elif cmd == 'scan':
+        if len(sys.argv) < 3:
+            print >>sys.stderr, "Usage: python %s scan HEX_LIST [FILE]" % sys.argv[0]
+            sys.exit(1)
+        chunk = sys.argv[2].replace(' ', '').decode('hex')
+        fpath = sys.argv[3] if len(sys.argv) > 3 else 'a.out'
+        ELF(fpath).scan_gadgets(chunk)
