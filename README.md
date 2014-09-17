@@ -8,10 +8,11 @@ A Return-oriented Programming toolkit
 
 ## Overview
 
-Currently roputils.py has 5 classes: ELF, ROP, Shellcode, FormatStr, Proc, Pattern.
+Currently roputils.py has 7 classes: ELF, ROP, ROPBlob, Shellcode, FormatStr, Proc, Pattern.
 
 * ELF: information about ELF object retrieved by readelf
-* ROP: subclass of ELF, with additional methods for creating ROP stack
+* ROP: subclass of ELF, with additional methods for creating ROP sequence
+* ROPBlob: subclass of ROP, for creating ROP sequence from leaked memory
 * Shellcode: x86 and x64 shellcode builder
 * FormatStr: create format string for exploitation
 * Proc: gateway interface of subprocess and socket

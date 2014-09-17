@@ -177,12 +177,9 @@ class ELF:
     def str(self, name):
         return self.base + self._string[name]
 
-    def gadget(self, keyword, reg=None, n=1, xmem=None):
-        if xmem:
-            addr, blob = xmem
-        else:
-            addr, blob = self.xmem
-            addr += self.base
+    def gadget(self, keyword, reg=None, n=1):
+        addr, blob = self.xmem
+        addr += self.base
 
         regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
         if reg:
@@ -512,26 +509,24 @@ class ROP(ELF):
 
         return buf
 
-    def dynamic_syscall(self, addr, data, number, *args):
-        xmem = (addr, data)
-
+    def syscall(self, number, *args):
         if self.wordsize == 8:
             arg_regs = ['rdi', 'rsi', 'rdx', 'r10', 'r8', 'r9']
-            buf = self.p(self.gadget('pop', 'rax', xmem=xmem)) + self.p(number)
+            buf = self.p(self.gadget('pop', 'rax')) + self.p(number)
             for arg_reg, arg in zip(arg_regs, args):
-                buf += self.p(self.gadget('pop', arg_reg, xmem=xmem)) + self.p(arg)
-            buf += self.p(self.gadget('syscall', xmem=xmem))
+                buf += self.p(self.gadget('pop', arg_reg)) + self.p(arg)
+            buf += self.p(self.gadget('syscall'))
         else:
             try:
                 # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
                 args = list(args) + [0] * (6-len(args))
-                buf = self.p(self.gadget('popad', xmem=xmem)) + struct.pack('<IIIIIIII', args[4], args[3], args[5], 0, args[0], args[2], args[1], number)
+                buf = self.p(self.gadget('popad')) + struct.pack('<IIIIIIII', args[4], args[3], args[5], 0, args[0], args[2], args[1], number)
             except ValueError:
                 arg_regs = ['ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp']
-                buf = self.p(self.gadget('pop', 'eax', xmem=xmem)) + self.p(number)
+                buf = self.p(self.gadget('pop', 'eax')) + self.p(number)
                 for arg_reg, arg in zip(arg_regs, args):
-                    buf += self.p(self.gadget('pop', arg_reg, xmem=xmem)) + self.p(arg)
-            buf += self.p(self.gadget('int0x80', xmem=xmem))
+                    buf += self.p(self.gadget('pop', arg_reg)) + self.p(arg)
+            buf += self.p(self.gadget('int0x80'))
         return buf
 
     def pivot(self, rsp):
@@ -550,6 +545,16 @@ class ROP(ELF):
         chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         buflen = size - len(buf)
         return ''.join(random.choice(chars) for i in xrange(buflen))
+
+    def derive(self, blob, base=0):
+        return ROPBlob(blob, self.wordsize, base)
+
+
+class ROPBlob(ROP):
+    def __init__(self, blob, wordsize, base=0):
+        self.xmem = (0, blob)
+        self.wordsize = wordsize
+        self.base = base
 
 
 class Shellcode:

