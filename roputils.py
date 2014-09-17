@@ -709,6 +709,9 @@ class Proc:
         if kwargs.get('debug'):
             os.kill(os.getpid(), signal.SIGTRAP)
 
+        self.write_interval = kwargs.get('write_interval', 0.1)
+        self.read_timeout = kwargs.get('read_timeout', 0.1)
+
         if 'host' in kwargs and 'port' in kwargs:
             self.p = socket.create_connection((kwargs['host'], kwargs['port']))
             self.p.setblocking(0)
@@ -718,7 +721,10 @@ class Proc:
             fl = fcntl.fcntl(fd, fcntl.F_GETFL)
             fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
-    def write(self, s, interval=0.1):
+    def write(self, s, interval=None):
+        if interval is None:
+            interval = self.write_interval
+
         time.sleep(interval)
         if isinstance(self.p, Popen):
             select.select([], [self.p.stdin], [])
@@ -727,7 +733,10 @@ class Proc:
             select.select([], [self.p], [])
             return self.p.sendall(s)
 
-    def read(self, size, timeout=0.1):
+    def read(self, size, timeout=None):
+        if timeout is None:
+            timeout = self.read_timeout
+
         buf = ''
         if isinstance(self.p, Popen):
             while len(buf) < size:
@@ -751,10 +760,10 @@ class Proc:
                     break
         return buf
 
-    def read_all(self, chunk_size=8192):
+    def read_all(self, chunk_size=8192, timeout=None):
         buf = ''
         while True:
-            chunk = self.read(chunk_size)
+            chunk = self.read(chunk_size, timeout)
             buf += chunk
             if len(chunk) < chunk_size:
                 break
@@ -794,17 +803,17 @@ class Proc:
         stdout, stderr = p.communicate()
         return stdout.rstrip()
 
-    def write_p64(self, s):
-        return self.write(p64(s))
+    def write_p64(self, s, interval=None):
+        return self.write(p64(s), interval)
 
-    def write_p32(self, s):
-        return self.write(p32(s))
+    def write_p32(self, s, interval=None):
+        return self.write(p32(s), interval)
 
-    def read_p64(self):
-        return p64(self.read(8))
+    def read_p64(self, timeout=None):
+        return p64(self.read(8, timeout))
 
-    def read_p32(self):
-        return p32(self.read(4))
+    def read_p32(self, timeout=None):
+        return p32(self.read(4, timeout))
 
 
 class Pattern:
