@@ -546,6 +546,12 @@ class ROP(ELF):
         buflen = size - len(buf)
         return ''.join(random.choice(chars) for i in xrange(buflen))
 
+    def retfill(self, size, buf=''):
+        buflen = size - len(buf)
+        s = self.fill(buflen % self.wordsize)
+        s += self.p(self.gadget('ret')) * (buflen // self.wordsize)
+        return s
+
     def derive(self, blob, base=0):
         return ROPBlob(blob, self.wordsize, base)
 

