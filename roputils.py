@@ -770,18 +770,22 @@ class Proc:
         return buf
 
     def interact(self):
+        buf = self.read_all()
+        sys.stdout.write(buf)
+
         if isinstance(self.p, Popen):
-            buf = self.read_all()
-            sys.stdout.write(buf)
             try:
                 self.write('exec /bin/sh <&2 >&2\n')
             except IOError as e:
-                if e.errno == errno.EPIPE:  # Broken pipe
-                    pass
-                else:
+                if e.errno != errno.EPIPE:  # Broken pipe
                     raise
             self.p.wait()
         else:
+            try:
+                self.write('exec /bin/sh >&0 2>&0\n')
+            except IOError as e:
+                if e.errno != errno.EPIPE:  # Broken pipe
+                    raise
             t = Telnet()
             t.sock = self.p
             t.interact()
