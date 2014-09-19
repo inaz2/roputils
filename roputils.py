@@ -394,6 +394,7 @@ class ROP(ELF):
 
         gadget_candidates = [
             # gcc (Ubuntu/Linaro 4.6.3-1ubuntu5) 4.6.3
+            # Ubuntu clang version 3.0-6ubuntu3 (tags/RELEASE_30/final) (based on LLVM 3.0)
             ('\x4c\x89\xfa\x4c\x89\xf6\x44\x89\xef\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x75\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3', False),
             # gcc (Ubuntu/Linaro 4.8.2-19ubuntu1) 4.8.2
             ('\x4c\x89\xea\x4c\x89\xf6\x44\x89\xff\x41\xff\x14\xdc\x48\x83\xc3\x01\x48\x39\xeb\x75\xea', '\x48\x8b\x5c\x24\x08\x48\x8b\x6c\x24\x10\x4c\x8b\x64\x24\x18\x4c\x8b\x6c\x24\x20\x4c\x8b\x74\x24\x28\x4c\x8b\x7c\x24\x30\x48\x83\xc4\x38\xc3', True),
@@ -415,6 +416,11 @@ class ROP(ELF):
         buf = p64(set_regs)
 
         for args in calls:
+            if len(args) > 4:
+                raise Exception('4th argument and latter should be set in advance')
+            elif args[1] >= (1<<32):
+                raise Exception("1st argument should be less than 2^32: %x" % args[1])
+
             ptr = args.pop(0)
             buf += self.junk()
             buf += p64(0) + p64(1) + p64(ptr)
