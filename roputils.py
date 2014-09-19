@@ -8,7 +8,6 @@ import socket
 import time
 import fcntl
 import select
-import errno
 import random
 import signal
 import tempfile
@@ -769,23 +768,20 @@ class Proc:
                 break
         return buf
 
-    def interact(self):
+    def interact(self, shell=True):
         buf = self.read_all()
         sys.stdout.write(buf)
 
         if isinstance(self.p, Popen):
-            try:
+            if shell:
+                self.write("echo '\x1b[32mgot a shell!\x1b[0m'\n")
+                sys.stdout.write(self.read_all())
                 self.write('exec /bin/sh <&2 >&2\n')
-            except IOError as e:
-                if e.errno != errno.EPIPE:  # Broken pipe
-                    raise
             self.p.wait()
         else:
-            try:
+            if shell:
                 self.write('exec /bin/sh >&0 2>&0\n')
-            except IOError as e:
-                if e.errno != errno.EPIPE:  # Broken pipe
-                    raise
+                self.write("echo '\x1b[32mgot a shell!\x1b[0m'\n")
             t = Telnet()
             t.sock = self.p
             t.interact()

