@@ -716,6 +716,7 @@ class Proc:
 
         self.write_interval = kwargs.get('write_interval', 0.1)
         self.read_timeout = kwargs.get('read_timeout', 0.1)
+        self.display = kwargs.get('display', False)
 
         if 'host' in kwargs and 'port' in kwargs:
             self.p = socket.create_connection((kwargs['host'], kwargs['port']))
@@ -726,11 +727,20 @@ class Proc:
             fl = fcntl.fcntl(fd, fcntl.F_GETFL)
             fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
 
+    def setdisplay(self, x):
+        self.display = bool(x)
+
     def write(self, s, interval=None):
         if interval is None:
             interval = self.write_interval
 
         time.sleep(interval)
+
+        if self.display:
+            printable = re.sub(r'[^\s\x20-\x7e]', '.', s)
+            sys.stdout.write("\x1b[33m%s\x1b[0m" % printable)  # yellow
+            sys.stdout.flush()
+
         if isinstance(self.p, Popen):
             select.select([], [self.p.stdin], [])
             return self.p.stdin.write(s)
@@ -763,6 +773,12 @@ class Proc:
                     buf += chunk
                 else:
                     break
+
+        if self.display:
+            printable = re.sub(r'[^\s\x20-\x7e]', '.', buf)
+            sys.stdout.write("\x1b[36m%s\x1b[0m" % printable)  # cyan
+            sys.stdout.flush()
+
         return buf
 
     def read_all(self, chunk_size=8192, timeout=None):
@@ -775,19 +791,23 @@ class Proc:
         return buf
 
     def interact(self, shell=True):
+        check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
+
+        self.setdisplay(False)
+
         buf = self.read_all()
         sys.stdout.write(buf)
 
         if isinstance(self.p, Popen):
             if shell:
-                self.write("echo '\x1b[32mgot a shell!\x1b[0m'\n")
+                self.write(check_cmd + '\n')
                 sys.stdout.write(self.read_all())
                 self.write('exec /bin/sh <&2 >&2\n')
             self.p.wait()
         else:
             if shell:
                 self.write('exec /bin/sh >&0 2>&0\n')
-                self.write("echo '\x1b[32mgot a shell!\x1b[0m'\n")
+                self.write(check_cmd + '\n')
             t = Telnet()
             t.sock = self.p
             t.interact()
