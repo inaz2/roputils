@@ -748,7 +748,10 @@ class Proc:
             select.select([], [self.p], [])
             return self.p.sendall(s)
 
-    def read(self, size, timeout=None):
+    def read(self, size=-1, timeout=None):
+        if size < 0:
+            return self.readall(timeout=timeout)
+
         if timeout is None:
             timeout = self.read_timeout
 
@@ -781,7 +784,7 @@ class Proc:
 
         return buf
 
-    def read_all(self, chunk_size=8192, timeout=None):
+    def readall(self, chunk_size=8192, timeout=None):
         buf = ''
         while True:
             chunk = self.read(chunk_size, timeout)
@@ -795,13 +798,13 @@ class Proc:
 
         self.setdisplay(False)
 
-        buf = self.read_all()
+        buf = self.read()
         sys.stdout.write(buf)
 
         if isinstance(self.p, Popen):
             if shell:
                 self.write(check_cmd + '\n')
-                sys.stdout.write(self.read_all())
+                sys.stdout.write(self.read())
                 self.write('exec /bin/sh <&2 >&2\n')
             self.p.wait()
         else:
