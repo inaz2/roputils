@@ -130,7 +130,6 @@ class ELF:
             if '@@' in name:
                 default_name = name.split('@@')[0]
                 self._symbol[default_name] = value
-        p.terminate()
         p.wait()
 
         self._string = {}
@@ -141,7 +140,6 @@ class ELF:
                 continue
             name, addr = field[1], int(field[0], 16)
             self._string[name] = addr
-        p.terminate()
         p.wait()
 
     def p(self, x):
@@ -718,7 +716,7 @@ class Proc:
             os.kill(os.getpid(), signal.SIGTRAP)
 
         self.write_interval = kwargs.get('write_interval', 0.1)
-        self.read_timeout = kwargs.get('read_timeout', 0.1)
+        self.read_timeout = kwargs.get('read_timeout', 0.5)
         self.display = kwargs.get('display', False)
 
         if 'host' in kwargs and 'port' in kwargs:
