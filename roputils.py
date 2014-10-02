@@ -914,10 +914,17 @@ class Pattern:
 
 class Asm:
     @classmethod
-    def assemble(cls, s):
+    def assemble(cls, s, arch):
+        if arch == 'i386':
+            option = '--32'
+        elif arch == 'x86-64':
+            option = '--64'
+        else:
+            raise Exception('unsupported architecture')
+
         with tempfile.NamedTemporaryFile(delete=False) as f:
             f.flush()
-            p = Popen(['as', '--msyntax=intel', '--mnaked-reg', '-o', f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            p = Popen(['as', option, '--msyntax=intel', '--mnaked-reg', '-o', f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             stdout, stderr = p.communicate(s+'\n')
             if stderr:
                 sys.stderr.write(stderr)
@@ -929,7 +936,7 @@ class Asm:
             os.remove(f.name)
 
     @classmethod
-    def disassemble(cls, chunk, arch):
+    def disassemble(cls, blob, arch):
         if arch == 'i386':
             (machine, options) = ('i386', 'intel')
         elif arch == 'x86-64':
@@ -938,7 +945,7 @@ class Asm:
             raise Exception('unsupported architecture')
 
         with tempfile.NamedTemporaryFile() as f:
-            f.write(chunk)
+            f.write(blob)
             f.flush()
             p = Popen(['objdump', '-w', '-b', 'binary', '-m', machine, '-M', options, '-D', f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
@@ -947,10 +954,13 @@ class Asm:
 
 
 if __name__ == '__main__':
+    fmt_usage = "Usage: python %s [checksec|create|offset|gadget|scan|asm] ..."
+
     if len(sys.argv) < 2:
-        print >>sys.stderr, "Usage: python %s [checksec|create|offset|gadget|scan|asm] ..." % sys.argv[0]
+        print >>sys.stderr, fmt_usage % sys.argv[0]
         sys.exit(1)
     cmd = sys.argv[1]
+
     if cmd == 'checksec':
         fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
         ELF(fpath).checksec()
@@ -973,11 +983,16 @@ if __name__ == '__main__':
         fpath = sys.argv[3] if len(sys.argv) > 3 else 'a.out'
         ELF(fpath).scan_gadgets(chunk)
     elif cmd == 'asm':
-        if len(sys.argv) < 3 or (sys.argv[2] == '-d' and len(sys.argv) < 5):
-            print >>sys.stderr, "Usage: python %s asm (ASM | -d (i386|x86-64) HEX_LIST)" % sys.argv[0]
-            sys.exit(1)
-        if sys.argv[2] == '-d':
-            chunk = sys.argv[4].replace(' ', '').decode('hex')
-            Asm.disassemble(chunk, sys.argv[3])
+        if len(sys.argv) > 2 and sys.argv[2] == '-d':
+            arch = sys.argv[3] if len(sys.argv) > 3 else 'i386'
+            data = sys.stdin.read()
+            if re.search(r'^[\s0-9A-Fa-f]*$', data):
+                data = ''.join(data.split()).decode('hex')
+            Asm.disassemble(data, arch)
         else:
-            Asm.assemble(sys.argv[2])
+            arch = sys.argv[2] if len(sys.argv) > 2 else 'i386'
+            data = sys.stdin.read()
+            Asm.assemble(data, arch)
+    else:
+        print >>sys.stderr, fmt_usage % sys.argv[0]
+        sys.exit(1)
