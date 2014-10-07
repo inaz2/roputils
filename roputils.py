@@ -890,8 +890,7 @@ class Pattern:
 
     @classmethod
     def offset(cls, s):
-        m = re.search(r'^(?:[0-9A-F]+|[0-9a-f]+)$', s)
-        if m:
+        if s.startswith('0x'):
             addr = int(s, 16)
             if addr >> 32:
                 chunk = p64(addr)
