@@ -812,7 +812,6 @@ class Proc:
             self.p.wait()
         else:
             if shell:
-                self.write('exec /bin/sh >&0 2>&0\n')
                 self.write(check_cmd + '\n')
             t = Telnet()
             t.sock = self.p

