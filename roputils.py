@@ -9,7 +9,6 @@ import time
 import fcntl
 import select
 import random
-import signal
 import tempfile
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
@@ -714,9 +713,6 @@ class FormatStr:
 
 class Proc:
     def __init__(self, *args, **kwargs):
-        if kwargs.get('debug'):
-            os.kill(os.getpid(), signal.SIGTRAP)
-
         self.write_interval = kwargs.get('write_interval', 0.1)
         self.read_timeout = kwargs.get('read_timeout', 0.5)
         self.display = kwargs.get('display', False)
