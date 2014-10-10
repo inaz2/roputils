@@ -809,6 +809,8 @@ class Proc:
         else:
             if shell:
                 self.write(check_cmd + '\n')
+                sys.stdout.write(self.read())
+                self.write('exec /bin/sh 2>&1\n')
             t = Telnet()
             t.sock = self.p
             t.interact()
