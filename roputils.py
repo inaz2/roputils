@@ -86,6 +86,11 @@ class ELF:
                         f.seek(offset)
                         blob = f.read(filesiz)
                     self.xmem = (virtaddr, blob)
+                else:
+                    with open(fpath, 'rb') as f:
+                        f.seek(offset)
+                        blob = f.read(filesiz)
+                    self.nxmem = (virtaddr, blob)
         while not (line.startswith('Relocation section') and '.plt' in line):  # read Dynamic section
             line = p.stdout.readline()
             m = re.search(r'^\s*(?P<Tag>\S+)\s+\((?P<Type>[^)]+)\)\s+(?P<Value>.+)$', line)
@@ -131,16 +136,6 @@ class ELF:
                 self._symbol[default_name] = value
         p.wait()
 
-        self._string = {}
-        p = Popen(['strings', '-tx', fpath], stdout=PIPE)
-        for line in p.stdout:
-            field = line.split()
-            if len(field) != 2:
-                continue
-            name, addr = field[1], int(field[0], 16)
-            self._string[name] = addr
-        p.wait()
-
     def p(self, x):
         if self.wordsize == 8:
             return p64(x)
@@ -172,7 +167,12 @@ class ELF:
         return self.base + self._symbol[name]
 
     def str(self, name):
-        return self.base + self._string[name]
+        for virtaddr, blob in [self.xmem, self.nxmem]:
+            try:
+                i = blob.index(name + '\x00')
+                return self.base + virtaddr + i
+            except ValueError:
+                pass
 
     def gadget(self, keyword, reg=None, n=1):
         addr, blob = self.xmem
