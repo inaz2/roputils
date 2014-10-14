@@ -42,6 +42,7 @@ class ELF:
         self._got = {}
         self._plt = {}
         self._symbol = {}
+        self._load_blobs = []
         plt_index = 1
 
         p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
@@ -81,16 +82,11 @@ class ELF:
                 if not 'E' in flg:
                     self.sec['nx'] = True
             elif type_ == 'LOAD':
-                if 'E' in flg:
-                    with open(fpath, 'rb') as f:
-                        f.seek(offset)
-                        blob = f.read(filesiz)
-                    self.xmem = (virtaddr, blob)
-                else:
-                    with open(fpath, 'rb') as f:
-                        f.seek(offset)
-                        blob = f.read(filesiz)
-                    self.nxmem = (virtaddr, blob)
+                with open(fpath, 'rb') as f:
+                    f.seek(offset)
+                    blob = f.read(filesiz)
+                is_executable = ('E' in flg)
+                self._load_blobs.append((virtaddr, blob, is_executable))
         while not (line.startswith('Relocation section') and '.plt' in line):  # read Dynamic section
             line = p.stdout.readline()
             m = re.search(r'^\s*(?P<Tag>\S+)\s+\((?P<Type>[^)]+)\)\s+(?P<Value>.+)$', line)
@@ -167,17 +163,26 @@ class ELF:
         return self.base + self._symbol[name]
 
     def str(self, name):
-        for virtaddr, blob in [self.xmem, self.nxmem]:
-            try:
-                i = blob.index(name + '\x00')
-                return self.base + virtaddr + i
-            except ValueError:
-                pass
+        return self.search(name + '\x00', include_no_executable=True)
+
+    def search(self, s, include_no_executable=False, regexp=False):
+        for virtaddr, blob, is_executable in self._load_blobs:
+            if not include_no_executable and not is_executable:
+                continue
+            if regexp:
+                m = re.search(s, blob)
+                if m:
+                    return self.base + virtaddr + m.start()
+            else:
+                try:
+                    i = blob.index(s)
+                    return self.base + virtaddr + i
+                except ValueError:
+                    pass
+        else:
+            raise ValueError()
 
     def gadget(self, keyword, reg=None, n=1):
-        addr, blob = self.xmem
-        addr += self.base
-
         regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
         if reg:
             try:
@@ -193,37 +198,35 @@ class ELF:
                     chunk = '\x41' + chr(0x58+(r-8)) + '\xc3'
                 else:
                     chunk = chr(0x58+r) + '\xc3'
-                return addr + blob.index(chunk)
+                return self.search(chunk)
             else:
                 # skip rsp
-                m = re.search(r"[\x58-\x5b\x5d-\x5f]{%d}\xc3" % n, blob)
-                return addr + m.start()
+                return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x41[\x58-\x5f]){%d}\xc3" % n, regexp=True)
         elif keyword == 'jmp':
             if r >= 8:
                 chunk = '\x41\xff' + chr(0xe0+(r-8))
             else:
                 chunk = '\xff' + chr(0xe0+r)
-            return addr + blob.index(chunk)
+            return self.search(chunk)
         elif keyword == 'call':
             if r >= 8:
                 chunk = '\x41\xff' + chr(0xd0+(r-8))
             else:
                 chunk = '\xff' + chr(0xd0+r)
-            return addr + blob.index(chunk)
+            return self.search(chunk)
         elif keyword == 'push':
             if r >= 8:
                 chunk = '\x41' + chr(0x50+(r-8)) + '\xc3'
             else:
                 chunk = chr(0x50+r) + '\xc3'
-            return addr + blob.index(chunk)
+            return self.search(chunk)
         elif keyword == 'pivot':
-            # TODO: support rax-rdi, r8-r15
             # xchg reg, esp
             if r == 0:
                 if reg[0] == 'r':
-                    return addr + blob.index('\x48\x94\xc3')
+                    return self.search('\x48\x94\xc3')
                 else:
-                    return addr + blob.index('\x94\xc3')
+                    return self.search('\x94\xc3')
             else:
                 if reg[0] == 'r':
                     if r >= 8:
@@ -233,7 +236,7 @@ class ELF:
                 else:
                     chunk = '\x87' + chr(0xe0+r) + '\xc3'
                 try:
-                    return addr + blob.index(chunk)
+                    return self.search(chunk)
                 except ValueError:
                     pass
 
@@ -244,28 +247,28 @@ class ELF:
                         chunk = '\x48\x87' + chr(0xc4+8*r) + '\xc3'
                 else:
                     chunk = '\x87' + chr(0xc4+8*r) + '\xc3'
-                return addr + blob.index(chunk)
+                return self.search(chunk)
         elif keyword == 'pushad':
-            # x86 only
-            return addr + blob.index('\x60\xc3')
+            # i386 only
+            return self.search('\x60\xc3')
         elif keyword == 'popad':
-            # x86 only
-            return addr + blob.index('\x61\xc3')
+            # i386 only
+            return self.search('\x61\xc3')
         elif keyword == 'leave':
-            return addr + blob.index('\xc9\xc3')
+            return self.search('\xc9\xc3')
         elif keyword == 'ret':
-            return addr + blob.index('\xc3')
+            return self.search('\xc3')
         elif keyword == 'int3':
-            return addr + blob.index('\xcc')
+            return self.search('\xcc')
         elif keyword == 'int0x80':
-            return addr + blob.index('\xcd\x80')
+            return self.search('\xcd\x80')
         elif keyword == 'call_gs':
-            return addr + blob.index('\x65\xff\x15\x10\x00\x00\x00')
+            return self.search('\x65\xff\x15\x10\x00\x00\x00')
         elif keyword == 'syscall':
-            return addr + blob.index('\x0f\x05')
+            return self.search('\x0f\x05')
         else:
-            # arbitary chunk
-            return addr + blob.index(keyword)
+            # search directly
+            return self.search(keyword)
 
     def checksec(self):
         ary = []
@@ -316,7 +319,7 @@ class ELF:
             try:
                 self.gadget('pop', n=i+1)
                 print "\033[32m%d\033[m" % (i+1),
-            except AttributeError:
+            except ValueError:
                 print "\033[31m%d\033[m" % (i+1),
         print
 
@@ -340,27 +343,27 @@ class ELF:
         print
 
     def scan_gadgets(self, chunk):
-        i = 0
-        while True:
-            buf = self.xmem[1][i:]
-            try:
-                i += buf.index(chunk)
-            except ValueError:
-                break
+        for virtaddr, blob, is_executable in self._load_blobs:
+            if not is_executable:
+                continue
 
-            addr = self.xmem[0] + i
-            p = Popen(['objdump', '-w', '-M', 'intel', '-D', '--start-address='+str(addr), self.fpath], stdout=PIPE)
-            stdout, stderr = p.communicate()
-
-            print
-            for line in stdout.splitlines()[6:]:
-                if not line:
-                    break
-                print line
-                if '(bad)' in line:
+            i = -1
+            while True:
+                try:
+                    i = blob.index(chunk, i+1)
+                except ValueError:
                     break
 
-            i += 1
+                p = Popen(['objdump', '-w', '-M', 'intel', '-D', '--start-address='+str(virtaddr + i), self.fpath], stdout=PIPE)
+                stdout, stderr = p.communicate()
+
+                print
+                for line in stdout.splitlines()[6:]:
+                    if not line:
+                        break
+                    print line
+                    if '(bad)' in line:
+                        break
 
 
 class ROP(ELF):
@@ -563,7 +566,7 @@ class ROP(ELF):
 
 class ROPBlob(ROP):
     def __init__(self, blob, wordsize, base=0):
-        self.xmem = (0, blob)
+        self._load_blobs = [(0, blob, True)]
         self.wordsize = wordsize
         self.base = base
 
@@ -675,7 +678,7 @@ class Shellcode:
 
 class FormatStr:
     def __init__(self, offset=0):
-        # x86 only
+        # i386 only
         self.offset = offset
 
     def dump_stack(self, size, start=None):
@@ -904,8 +907,10 @@ class Pattern:
         buf = ''
         for x in cls.generate():
             buf += x
-            if chunk in buf:
+            try:
                 return buf.index(chunk)
+            except ValueError:
+                pass
         else:
             raise Exception("pattern not found")
 
