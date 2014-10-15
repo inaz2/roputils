@@ -69,7 +69,7 @@ class ELF:
                 continue
             name, address = m.group('Name'), int(m.group('Address'), 16)
             self._section[name] = address
-        while not line.startswith('Dynamic section'):  # read Program Headers
+        while not line.startswith('Dynamic section') and line != 'There is no dynamic section in this file.\n':  # read Program Headers
             line = p.stdout.readline()
             m = re.search(r'^\s*(?P<Type>\S+)\s+(?P<Offset>\S+)\s+(?P<VirtAddr>\S+)\s+(?P<PhysAddr>\S+)\s+(?P<FileSiz>\S+)\s+(?P<MemSiz>\S+)\s+(?P<Flg>.{3})\s+(?P<Align>\S+)$', line)
             if not m or m.group('Type') == 'Type':
