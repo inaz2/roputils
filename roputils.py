@@ -37,6 +37,7 @@ class ELF:
         if not os.path.exists(fpath):
             raise Exception("file not found: %r" % fpath)
 
+        self._entry_point = None
         self._section = {}
         self._dynamic = {}
         self._got = {}
@@ -63,6 +64,8 @@ class ELF:
             elif key == 'Type':
                 if value == 'DYN (Shared object file)':
                     self.sec['pie'] = True
+            elif key == 'Entry point address':
+                self._entry_point = int(value, 16)
         while line != 'Program Headers:\n':  # read Section Headers
             line = p.stdout.readline()
             m = re.search(r'^\s*\[(?P<Nr>[^\]]+)\]\s+(?P<Name>\S+)\s+(?P<Type>\S+)\s+(?P<Address>\S+)\s+(?P<Off>\S+)\s+(?P<Size>\S+)\s+(?P<ES>\S+)\s+(?P<Flg>\S+)\s+(?P<Lk>\S+)\s+(?P<Inf>\S+)\s+(?P<Al>\S+)$', line)
@@ -334,6 +337,140 @@ class ELF:
                     print line
                     if '(bad)' in line:
                         break
+
+    def objdump(self):
+        p = Popen(['objdump', '-M', 'intel', '-d', self.fpath], stdout=PIPE)
+        stdout, stderr = p.communicate()
+
+        rev_symbol = {}
+        rev_plt = {}
+        for k, v in self._symbol.iteritems():
+            rev_symbol.setdefault(v, []).append(k)
+        for k, v in self._plt.iteritems():
+            rev_plt.setdefault(v, []).append(k)
+
+        lines = []
+        labels = {}
+        code_xrefs = {}
+        data_xrefs = {}
+
+        # collect addresses
+        for line in stdout.splitlines():
+            ary = line.strip().split(':', 1)
+            try:
+                addr, expr = int(ary[0], 16), ary[1]
+                labels[addr] = None
+            except ValueError:
+                addr, expr = None, None
+            lines.append((line, addr, expr))
+
+        # collect references
+        for line, addr, expr in lines:
+            if addr is None:
+                continue
+
+            if addr == self._entry_point:
+                labels[addr] = '_start'
+
+            m = re.search(r'call\s+([\dA-Fa-f]+)\b', line)
+            if m:
+                ref = int(m.group(1), 16)
+                labels[ref] = "sub_%x" % ref
+                code_xrefs.setdefault(ref, set()).add(addr)
+
+            m = re.search(r'j\w{1,2}\s+([\dA-Fa-f]+)\b', line)
+            if m:
+                ref = int(m.group(1), 16)
+                labels[ref] = "loc_%x" % ref
+                code_xrefs.setdefault(ref, set()).add(addr)
+
+            for m in re.finditer(r'0x([\dA-Fa-f]{3,})\b', expr):
+                ref = int(m.group(1), 16)
+                if ref in labels:
+                    labels[ref] = "loc_%x" % ref
+                    data_xrefs.setdefault(ref, set()).add(addr)
+
+        for k, v in code_xrefs.iteritems():
+            code_xrefs[k] = sorted(list(v))
+        for k, v in data_xrefs.iteritems():
+            data_xrefs[k] = sorted(list(v))
+
+        # output with annotations
+        def repl_func1(addr, color):
+            def _f(m):
+                ref = int(m.group(2), 16)
+                return "\x1b[%dm%s%s [%+#x]\x1b[0m" % (color, m.group(1), labels[ref], ref-addr)
+            return _f
+
+        def repl_func2(color):
+            def _f(m):
+                addr = int(m.group(1), 16)
+                if addr in labels and not addr in rev_symbol:
+                    return "\x1b[%dm%s\x1b[0m" % (color, labels[addr])
+                else:
+                    return m.group(0)
+            return _f
+
+        for line, addr, expr in lines:
+            if addr is None:
+                print line
+                continue
+
+            line = re.sub(r'(call\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[33m\\1\\2\x1b[0m', line)
+            line = re.sub(r'(call\s+)([\dA-Fa-f]+)\s+<[^>]+>', repl_func1(addr, 33), line)
+            line = re.sub(r'(j\w{1,2}\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[32m\\1\\2\x1b[0m', line)
+            line = re.sub(r'(j\w{1,2}\s+)([\dA-Fa-f]+)\s+<[^>]+>', repl_func1(addr, 32), line)
+            line = re.sub(r'0x([\dA-Fa-f]{3,})\b', repl_func2(36), line)
+
+            expr = line.split(':', 1)[1]
+
+            label = ''
+            if labels[addr]:
+                if not addr in rev_symbol and not addr in rev_plt:
+                    if labels[addr].startswith('loc_'):
+                        label += "\x1b[32m%s:\x1b[0m" % labels[addr]
+                        label += ' ' * (78-len(label)+9)
+                    else:
+                        label += '\n'
+                        label += "\x1b[33m%s:\x1b[0m" % labels[addr]
+                        label += ' ' * (78-len(label)+9+1)
+                else:
+                    label += ' ' * 78
+                if addr in code_xrefs:
+                    label += " \x1b[32m; CODE XREF: %s\x1b[0m" % ', '.join(("%x" % x) for x in code_xrefs[addr])
+                if addr in data_xrefs:
+                    label += " \x1b[36m; DATA XREF: %s\x1b[0m" % ', '.join(("%x" % x) for x in data_xrefs[addr])
+                if addr == self._entry_point:
+                    label += ' \x1b[33m; ENTRY POINT\x1b[0m'
+            if label:
+                print label
+
+            annotations = []
+            for m in re.finditer(r'([\dA-Fa-f]{3,})\b', expr):
+                ref = int(m.group(1), 16)
+
+                if 0 <= ref - self._section['.data'][0] < self._section['.data'][1]:
+                    annotations.append('[.data]')
+                elif 0 <= ref - self._section['.bss'][0] < self._section['.bss'][1]:
+                    annotations.append('[.bss]')
+
+                if ref in rev_symbol:
+                    annotations.append(', '.join(rev_symbol[ref]))
+
+                for virtaddr, blob, is_exebutable in self._load_blobs:
+                    if 0 <= ref - virtaddr < len(blob):
+                        m = re.search(r'^([\s\x20-\x7e]+)\x00', blob[(ref - virtaddr):])
+                        if m:
+                            annotations.append(repr(m.group(1)))
+                            break
+
+            if annotations:
+                print "%-70s \x1b[30;1m; %s\x1b[0m" % (line, ' '.join(annotations))
+            else:
+                print line
+
+            if 'ret' in line:
+                print "\x1b[30;1m; %s\x1b[0m" % ('-' * 78)
 
 
 class ROP(ELF):
@@ -927,7 +1064,7 @@ class Asm:
 
 
 if __name__ == '__main__':
-    fmt_usage = "Usage: python %s [checksec|create|offset|gadget|scan|asm] ..."
+    fmt_usage = "Usage: python %s [checksec|create|offset|gadget|scan|asm|objdump] ..."
 
     if len(sys.argv) < 2:
         print >>sys.stderr, fmt_usage % sys.argv[0]
@@ -959,13 +1096,16 @@ if __name__ == '__main__':
         if len(sys.argv) > 2 and sys.argv[2] == '-d':
             arch = sys.argv[3] if len(sys.argv) > 3 else 'i386'
             data = sys.stdin.read()
-            if re.search(r'^[\s0-9A-Fa-f]*$', data):
+            if re.search(r'^[\s\dA-Fa-f]*$', data):
                 data = ''.join(data.split()).decode('hex')
             Asm.disassemble(data, arch)
         else:
             arch = sys.argv[2] if len(sys.argv) > 2 else 'i386'
             data = sys.stdin.read()
             Asm.assemble(data, arch)
+    elif cmd == 'objdump':
+        fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
+        ELF(fpath).objdump()
     else:
         print >>sys.stderr, fmt_usage % sys.argv[0]
         sys.exit(1)
