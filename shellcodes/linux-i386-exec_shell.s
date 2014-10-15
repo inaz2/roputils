@@ -3,8 +3,8 @@
 _start:
         xor edx, edx
         push edx
-        push 0x68732f2f    /* "//sh" */
-        push 0x6e69622f    /* "/bin" */
+        push 0x68732f2f
+        push 0x6e69622f    /* "/bin//sh" */
         mov ebx, esp
         push edx
         push ebx

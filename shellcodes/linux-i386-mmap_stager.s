@@ -6,8 +6,8 @@ _start:
         shl edx, 12
         push ecx
         push -1
-        push 0x22          /* MAP_PRIVATE|MAP_ANONYMOUS */
-        push 0x7           /* PROT_READ|PROT_WRITE|PROT_EXEC */
+        push 0x22          /* MAP_PRIVATE | MAP_ANONYMOUS */
+        push 0x7           /* PROT_READ | PROT_WRITE | PROT_EXEC */
         push edx
         push ecx
         mov ebx, esp

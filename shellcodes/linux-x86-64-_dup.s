@@ -2,10 +2,13 @@
         .globl _start
 _start:
         xor rdx, rdx
-        lea rdi, [rdx+4]   /* fd */
-        lea rsi, [rdx+2]
+        push 4             /* fd */
+        pop rdi
+        push 2
+        pop rsi
 loop:
-        lea rax, [rdx+33]  /* dup2 */
+        push 33            /* dup2 */
+        pop rax
         syscall
         dec rsi
         jns loop

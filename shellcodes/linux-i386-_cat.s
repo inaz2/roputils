@@ -10,8 +10,8 @@ callee:
         add cl, [eax]
         mov [ecx], dl
         push edx
-        push 0x7461632f    /* "/cat" */
-        push 0x6e69622f    /* "/bin" */
+        push 0x7461632f
+        push 0x6e69622f    /* "/bin/cat" */
         mov ebx, esp
         push edx
         push esi

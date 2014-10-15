@@ -13,7 +13,7 @@ $ python roputils.py create 200 | strace -i ./ropasaurusrex-85a84f36f81e11f720b1
 [????????] +++ killed by SIGSEGV (core dumped) +++
 Segmentation fault (core dumped)
 
-$ python roputils.py offset 37654136
+$ python roputils.py offset 0x37654136
 140
 """
 
