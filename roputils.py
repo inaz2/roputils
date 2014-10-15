@@ -43,7 +43,7 @@ class ELF:
         self._plt = {}
         self._symbol = {}
         self._load_blobs = []
-        plt_index = 1
+        plt_slotsize = 0x10
 
         p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
         line = ''
@@ -52,7 +52,7 @@ class ELF:
             m = re.search(r'^\s*(?P<key>[^:]+):\s+(?P<value>.+)$', line)
             if not m:
                 continue
-            key, value = m.group('key'), m.group('value')
+            key, value = m.group('key', 'value')
             if key == 'Class':
                 if value == 'ELF64':
                     self.wordsize = 8
@@ -68,14 +68,16 @@ class ELF:
             m = re.search(r'^\s*\[(?P<Nr>[^\]]+)\]\s+(?P<Name>\S+)\s+(?P<Type>\S+)\s+(?P<Address>\S+)\s+(?P<Off>\S+)\s+(?P<Size>\S+)\s+(?P<ES>\S+)\s+(?P<Flg>\S+)\s+(?P<Lk>\S+)\s+(?P<Inf>\S+)\s+(?P<Al>\S+)$', line)
             if not m or m.group('Nr') == 'Nr':
                 continue
-            name, address = m.group('Name'), int(m.group('Address'), 16)
-            self._section[name] = address
+            name = m.group('Name')
+            address, size = [int(x, 16) for x in m.group('Address', 'Size')]
+            self._section[name] = (address, size)
         while not line.startswith('Dynamic section') and line != 'There is no dynamic section in this file.\n':  # read Program Headers
             line = p.stdout.readline()
             m = re.search(r'^\s*(?P<Type>\S+)\s+(?P<Offset>\S+)\s+(?P<VirtAddr>\S+)\s+(?P<PhysAddr>\S+)\s+(?P<FileSiz>\S+)\s+(?P<MemSiz>\S+)\s+(?P<Flg>.{3})\s+(?P<Align>\S+)$', line)
             if not m or m.group('Type') == 'Type':
                 continue
-            type_, offset, virtaddr, filesiz, flg = m.group('Type'), int(m.group('Offset'), 16), int(m.group('VirtAddr'), 16), int(m.group('FileSiz'), 16), m.group('Flg')
+            type_, flg = m.group('Type', 'Flg')
+            offset, virtaddr, filesiz = [int(x, 16) for x in m.group('Offset', 'VirtAddr', 'FileSiz')]
             if type_ == 'GNU_RELRO':
                 self.sec['relro'] = True
             elif type_ == 'GNU_STACK':
@@ -92,7 +94,7 @@ class ELF:
             m = re.search(r'^\s*(?P<Tag>\S+)\s+\((?P<Type>[^)]+)\)\s+(?P<Value>.+)$', line)
             if not m or m.group('Tag') == 'Tag':
                 continue
-            type_, value = m.group('Type'), m.group('Value')
+            type_, value = m.group('Type', 'Value')
             if type_ == 'BIND_NOW':
                 self.sec['bind_now'] = True
             elif type_ == 'RPATH':
@@ -110,12 +112,12 @@ class ELF:
             m = re.search(r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$', line)
             if not m or m.group('Offset') == 'Offset':
                 continue
-            offset, type_, name = int(m.group('Offset'), 16), m.group('Type'), m.group('Name')
+            type_, name = m.group('Type', 'Name')
+            offset = int(m.group('Offset'), 16)
             if not type_.endswith('JUMP_SLOT'):
                 continue
             self._got[name] = offset
-            self._plt[name] = self._section['.plt'] + 0x10*plt_index
-            plt_index += 1
+            self._plt[name] = self._section['.plt'][0] + (plt_slotsize * (len(self._plt)+1))
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
         while line and not line.startswith('Version symbols section'):  # read Symbol table
@@ -125,7 +127,8 @@ class ELF:
                 continue
             if m.group('Ndx') == 'UND':
                 continue
-            name, value = m.group('Name'), int(m.group('Value'), 16)
+            name = m.group('Name')
+            value = int(m.group('Value'), 16)
             self._symbol[name] = value
             if '@@' in name:
                 default_name = name.split('@@')[0]
@@ -142,7 +145,7 @@ class ELF:
         self.base = addr - self._symbol[name]
 
     def section(self, name):
-        return self.base + self._section[name]
+        return self.base + self._section[name][0]
 
     def dynamic(self, name):
         return self.base + self._dynamic[name]
@@ -157,7 +160,7 @@ class ELF:
         if name:
             return self.base + self._plt[name]
         else:
-            return self.base + self._section['.plt']
+            return self.base + self._section['.plt'][0]
 
     def addr(self, name):
         return self.base + self._symbol[name]
@@ -183,6 +186,19 @@ class ELF:
             raise ValueError()
 
     def gadget(self, keyword, reg=None, n=1):
+        table = {
+            'pushad': '\x60\xc3',  # i386 only
+            'popad': '\x61\xc3',   # i386 only
+            'leave': '\xc9\xc3',
+            'ret': '\xc3',
+            'int3': '\xcc',
+            'int0x80': '\xcd\x80',
+            'call_gs': '\x65\xff\x15\x10\x00\x00\x00',
+            'syscall': '\x0f\x05',
+        }
+        if keyword in table:
+            return self.search(table[keyword])
+
         regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
         if reg:
             try:
@@ -221,98 +237,52 @@ class ELF:
                 chunk = chr(0x50+r) + '\xc3'
             return self.search(chunk)
         elif keyword == 'pivot':
-            # xchg reg, esp
-            if r == 0:
-                if reg[0] == 'r':
-                    return self.search('\x48\x94\xc3')
+            # chunk1: xchg REG, rsp
+            # chunk2: xchg rsp, REG
+            if r >= 8:
+                chunk1 = '\x49\x87' + chr(0xe0+(r-8)) + '\xc3'
+                chunk2 = '\x4c\x87' + chr(0xc4+8*(r-8)) + '\xc3'
+            elif reg[0] == 'r':
+                if r == 0:
+                    chunk1 = '\x48\x94\xc3'
                 else:
-                    return self.search('\x94\xc3')
+                    chunk1 = '\x48\x87' + chr(0xe0+r) + '\xc3'
+                chunk2 = '\x48\x87' + chr(0xc4+8*r) + '\xc3'
             else:
-                if reg[0] == 'r':
-                    if r >= 8:
-                        chunk = '\x49\x87' + chr(0xe0+(r-8)) + '\xc3'
-                    else:
-                        chunk = '\x48\x87' + chr(0xe0+r) + '\xc3'
+                if r == 0:
+                    chunk1 = '\x94\xc3'
                 else:
-                    chunk = '\x87' + chr(0xe0+r) + '\xc3'
-                try:
-                    return self.search(chunk)
-                except ValueError:
-                    pass
-
-                if reg[0] == 'r':
-                    if r >= 8:
-                        chunk = '\x4c\x87' + chr(0xc4+8*(r-8)) + '\xc3'
-                    else:
-                        chunk = '\x48\x87' + chr(0xc4+8*r) + '\xc3'
-                else:
-                    chunk = '\x87' + chr(0xc4+8*r) + '\xc3'
-                return self.search(chunk)
-        elif keyword == 'pushad':
-            # i386 only
-            return self.search('\x60\xc3')
-        elif keyword == 'popad':
-            # i386 only
-            return self.search('\x61\xc3')
-        elif keyword == 'leave':
-            return self.search('\xc9\xc3')
-        elif keyword == 'ret':
-            return self.search('\xc3')
-        elif keyword == 'int3':
-            return self.search('\xcc')
-        elif keyword == 'int0x80':
-            return self.search('\xcd\x80')
-        elif keyword == 'call_gs':
-            return self.search('\x65\xff\x15\x10\x00\x00\x00')
-        elif keyword == 'syscall':
-            return self.search('\x0f\x05')
+                    chunk1 = '\x87' + chr(0xe0+r) + '\xc3'
+                chunk2 = '\x87' + chr(0xc4+8*r) + '\xc3'
+            try:
+                return self.search(chunk1)
+            except ValueError:
+                return self.search(chunk2)
         else:
             # search directly
             return self.search(keyword)
 
     def checksec(self):
-        ary = []
-
+        result = ''
         if self.sec['relro']:
-            if self.sec['bind_now']:
-                ary.append('\033[32mFull RELRO   \033[m   ')
-            else:
-                ary.append('\033[33mPartial RELRO\033[m   ')
+            result += '\033[32mFull RELRO   \033[m   ' if self.sec['bind_now'] else '\033[33mPartial RELRO\033[m   '
         else:
-            ary.append('\033[31mNo RELRO     \033[m   ')
+            result += '\033[31mNo RELRO     \033[m   '
+        result += '\033[32mCanary found   \033[m   ' if self.sec['stack_canary'] else '\033[31mNo canary found\033[m   '
+        result += '\033[32mNX enabled \033[m   ' if self.sec['nx'] else '\033[31mNX disabled\033[m   '
+        result += '\033[32mPIE enabled  \033[m   ' if self.sec['pie'] else '\033[31mNo PIE       \033[m   '
+        result += '\033[31mRPATH    \033[m  ' if self.sec['rpath'] else '\033[32mNo RPATH \033[m  '
+        result += '\033[31mRUNPATH    \033[m  ' if self.sec['runpath'] else '\033[32mNo RUNPATH \033[m  '
+        result += self.fpath
 
-        if self.sec['stack_canary']:
-            ary.append('\033[32mCanary found   \033[m   ')
-        else:
-            ary.append('\033[31mNo canary found\033[m   ')
-
-        if self.sec['nx']:
-            ary.append('\033[32mNX enabled \033[m   ')
-        else:
-            ary.append('\033[31mNX disabled\033[m   ')
-
-        if self.sec['pie']:
-            ary.append('\033[32mPIE enabled  \033[m   ')
-        else:
-            ary.append('\033[31mNo PIE       \033[m   ')
-
-        if self.sec['rpath']:
-            ary.append('\033[31mRPATH    \033[m  ')
-        else:
-            ary.append('\033[32mNo RPATH \033[m  ')
-
-        if self.sec['runpath']:
-            ary.append('\033[31mRUNPATH    \033[m  ')
-        else:
-            ary.append('\033[32mNo RUNPATH \033[m  ')
-
-        ary.append(self.fpath)
-
-        print "RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE"
-        print ''.join(ary)
+        print 'RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE'
+        print result
 
     def list_gadgets(self):
-        regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
+        if self.wordsize == 8:
+            regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
+        else:
+            regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
 
         print "%8s" % 'pop',
         for i in range(6):
