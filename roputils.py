@@ -411,6 +411,10 @@ class ELF:
                     return m.group(0)
             return _f
 
+        arrows = {}
+        for k, v in [(True, u'\u25b2'), (False, u'\u25bc')]:
+            arrows[k] = v.encode('utf-8')
+
         for line, addr, expr in lines:
             if addr is None:
                 print line
@@ -437,9 +441,11 @@ class ELF:
                 else:
                     label += ' ' * 78
                 if addr in code_xrefs:
-                    label += " \x1b[32m; CODE XREF: %s\x1b[0m" % ', '.join(("%x" % x) for x in code_xrefs[addr])
+                    ary = ["%x%s" % (x, arrows[x < addr]) for x in code_xrefs[addr]]
+                    label += " \x1b[32m; CODE XREF: %s\x1b[0m" % ', '.join(ary)
                 if addr in data_xrefs:
-                    label += " \x1b[36m; DATA XREF: %s\x1b[0m" % ', '.join(("%x" % x) for x in data_xrefs[addr])
+                    ary = ["%x%s" % (x, arrows[x < addr]) for x in data_xrefs[addr]]
+                    label += " \x1b[36m; DATA XREF: %s\x1b[0m" % ', '.join(ary)
                 if addr == self._entry_point:
                     label += ' \x1b[33m; ENTRY POINT\x1b[0m'
             if label:
