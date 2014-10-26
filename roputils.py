@@ -315,7 +315,7 @@ class ELF:
                 print "\033[31m%s\033[m" % keyword,
         print
 
-    def scan_gadgets(self, chunk):
+    def scan_gadgets(self, chunk, pos=0):
         for virtaddr, blob, is_executable in self._load_blobs:
             if not is_executable:
                 continue
@@ -327,7 +327,7 @@ class ELF:
                 except ValueError:
                     break
 
-                p = Popen(['objdump', '-w', '-M', 'intel', '-D', '--start-address='+str(virtaddr + i), self.fpath], stdout=PIPE)
+                p = Popen(['objdump', '-w', '-M', 'intel', '-D', '--start-address='+str(virtaddr+i-pos), self.fpath], stdout=PIPE)
                 stdout, stderr = p.communicate()
 
                 print
@@ -1093,11 +1093,12 @@ if __name__ == '__main__':
         ELF(fpath).list_gadgets()
     elif cmd == 'scan':
         if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: python %s scan HEX_LIST [FILE]" % sys.argv[0]
+            print >>sys.stderr, "Usage: python %s scan HEX_LIST [POS [FILE]]" % sys.argv[0]
             sys.exit(1)
         chunk = sys.argv[2].replace(' ', '').decode('hex')
-        fpath = sys.argv[3] if len(sys.argv) > 3 else 'a.out'
-        ELF(fpath).scan_gadgets(chunk)
+        pos = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+        fpath = sys.argv[4] if len(sys.argv) > 4 else 'a.out'
+        ELF(fpath).scan_gadgets(chunk, pos)
     elif cmd == 'asm':
         if len(sys.argv) > 2 and sys.argv[2] == '-d':
             arch = sys.argv[3] if len(sys.argv) > 3 else 'i386'
