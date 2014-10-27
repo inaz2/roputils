@@ -829,8 +829,7 @@ class FormatStr:
 
 class Proc:
     def __init__(self, *args, **kwargs):
-        self.write_interval = kwargs.get('write_interval', 0.1)
-        self.read_timeout = kwargs.get('read_timeout', 0.5)
+        self.timeout = kwargs.get('timeout', 0.1)
         self.display = kwargs.get('display', False)
 
         if 'host' in kwargs and 'port' in kwargs:
@@ -846,10 +845,8 @@ class Proc:
         self.display = bool(x)
 
     def write(self, s, interval=None):
-        if interval is None:
-            interval = self.write_interval
-
-        time.sleep(interval)
+        if interval is not None:
+            time.sleep(interval)
 
         if self.display:
             printable = re.sub(r'[^\s\x20-\x7e]', '.', s)
@@ -868,7 +865,7 @@ class Proc:
             return self.readall(timeout=timeout)
 
         if timeout is None:
-            timeout = self.read_timeout
+            timeout = self.timeout
 
         buf = ''
         if isinstance(self.p, Popen):
