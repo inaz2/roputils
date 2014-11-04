@@ -144,8 +144,10 @@ class ELF:
         else:
             return p32(x)
 
-    def set_base(self, addr, name='__libc_start_main'):
-        self.base = addr - self._symbol[name]
+    def set_base(self, addr, ref_symbol=None):
+        self.base = addr
+        if ref_symbol:
+            self.base -= self._symbol[ref_symbol]
 
     def section(self, name):
         return self.base + self._section[name][0]
