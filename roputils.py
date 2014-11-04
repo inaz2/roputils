@@ -848,21 +848,20 @@ class Proc:
         if interval is not None:
             time.sleep(interval)
 
+        if isinstance(self.p, Popen):
+            select.select([], [self.p.stdin], [])
+            self.p.stdin.write(s)
+        else:
+            select.select([], [self.p], [])
+            self.p.sendall(s)
+
         if self.display:
             printable = re.sub(r'[^\s\x20-\x7e]', '.', s)
             sys.stdout.write("\x1b[33m%s\x1b[0m" % printable)  # yellow
-            sys.stdout.flush()
-
-        if isinstance(self.p, Popen):
-            select.select([], [self.p.stdin], [])
-            return self.p.stdin.write(s)
-        else:
-            select.select([], [self.p], [])
-            return self.p.sendall(s)
 
     def read(self, size=-1, timeout=None):
         if size < 0:
-            return self.readall(timeout=timeout)
+            return self.read_all(timeout=timeout)
 
         if timeout is None:
             timeout = self.timeout
@@ -892,11 +891,10 @@ class Proc:
         if self.display:
             printable = re.sub(r'[^\s\x20-\x7e]', '.', buf)
             sys.stdout.write("\x1b[36m%s\x1b[0m" % printable)  # cyan
-            sys.stdout.flush()
 
         return buf
 
-    def readall(self, chunk_size=8192, timeout=None):
+    def read_all(self, chunk_size=8192, timeout=None):
         buf = ''
         while True:
             chunk = self.read(chunk_size, timeout)
@@ -904,6 +902,18 @@ class Proc:
             if len(chunk) < chunk_size:
                 break
         return buf
+
+    def read_until(self, s):
+        buf = self.read(len(s), 864000)
+        while not buf.endswith(s):
+            buf += self.read(1, 864000)
+        return buf
+
+    def readline(self):
+        return self.read_until('\n')
+
+    def writeline(self, s):
+        return self.write(s+'\n')
 
     def interact(self, shell=True):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
