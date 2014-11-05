@@ -917,7 +917,7 @@ class Proc:
     def writeline(self, s):
         return self.write(s+'\n')
 
-    def interact(self, shell=True):
+    def interact(self, redirect_fd=None):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
 
         self.setdisplay(False)
@@ -926,16 +926,16 @@ class Proc:
         sys.stdout.write(buf)
 
         if isinstance(self.p, Popen):
-            if shell:
+            if redirect_fd is not None:
                 self.write(check_cmd + '\n')
                 sys.stdout.write(self.read())
                 self.write('exec /bin/sh <&2 >&2\n')
             self.p.wait()
         else:
-            if shell:
+            if redirect_fd is not None:
                 self.write(check_cmd + '\n')
                 sys.stdout.write(self.read())
-                self.write('exec /bin/sh 2>&1\n')
+                self.write("exec /bin/sh <&%(fd)d >&%(fd)d 2>&%(fd)d\n" % {'fd': redirect_fd})
             t = Telnet()
             t.sock = self.p
             t.interact()
