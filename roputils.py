@@ -911,6 +911,12 @@ class Proc:
             buf += self.read(1, 864000)
         return buf
 
+    def expect(self, regexp):
+        buf = ''
+        while not re.search(regexp, buf):
+            buf += self.read(1, 864000)
+        return buf
+
     def readline(self):
         return self.read_until('\n')
 
