@@ -976,14 +976,14 @@ class Proc:
         else:
             self.p.close()
 
-    def strings(self, n=4):
+    def pipe_output(self, *args):
         if isinstance(self.p, Popen):
             p_stdout = self.p.stdout
         else:
             p_stdout = self.p.makefile()
-        p = Popen(['strings', '-tx', '-n', str(n)], stdin=p_stdout, stdout=PIPE)
+        p = Popen(args, stdin=p_stdout, stdout=PIPE)
         stdout, stderr = p.communicate()
-        return stdout.rstrip()
+        return stdout
 
     def write_p64(self, s, interval=None):
         return self.write(p64(s), interval)

