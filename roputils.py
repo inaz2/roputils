@@ -735,11 +735,11 @@ class Shellcode:
     def cat(self, fpath):
         return self.get('_cat') + chr(len(fpath)) + fpath
 
-    def dup(self, name, fd):
+    def dup(self, fd):
         if fd > 0x7f:
             raise Exception("fd over 0x7f is unsupported: %d" % fd)
 
-        return self.get('_dup').replace('${fd}', chr(fd)) + self.get(name)
+        return self.get('_dup').replace('${fd}', chr(fd))
 
     def exec_command(self, command):
         return self.get('_exec_command') + chr(len(command)) + command
