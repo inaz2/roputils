@@ -860,6 +860,7 @@ class Proc:
         if self.display:
             printable = re.sub(r'[^\s\x20-\x7e]', '.', s)
             sys.stdout.write("\x1b[33m%s\x1b[0m" % printable)  # yellow
+            sys.stdout.flush()
 
     def read(self, size=-1, timeout=None):
         if size < 0:
@@ -886,6 +887,7 @@ class Proc:
         if self.display:
             printable = re.sub(r'[^\s\x20-\x7e]', '.', buf)
             sys.stdout.write("\x1b[36m%s\x1b[0m" % printable)  # cyan
+            sys.stdout.flush()
 
         return buf
 
