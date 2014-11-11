@@ -868,27 +868,20 @@ class Proc:
         if timeout is None:
             timeout = self.timeout
 
-        buf = ''
         if isinstance(self.p, Popen):
-            while len(buf) < size:
-                rlist, wlist, xlist = select.select([self.p.stdout], [], [], timeout)
-                if rlist:
-                    chunk = self.p.stdout.read(size-len(buf))
-                    if not chunk:
-                        break
-                    buf += chunk
-                else:
-                    break
+            stdout, read = self.p.stdout, self.p.stdout.read
         else:
-            while len(buf) < size:
-                rlist, wlist, xlist = select.select([self.p], [], [], timeout)
-                if rlist:
-                    chunk = self.p.recv(size-len(buf))
-                    if not chunk:
-                        break
-                    buf += chunk
-                else:
-                    break
+            stdout, read = self.p, self.p.recv
+
+        buf = ''
+        while len(buf) < size:
+            rlist, wlist, xlist = select.select([stdout], [], [], timeout)
+            if not rlist:
+                break
+            chunk = read(size-len(buf))
+            if not chunk:
+                break
+            buf += chunk
 
         if self.display:
             printable = re.sub(r'[^\s\x20-\x7e]', '.', buf)
