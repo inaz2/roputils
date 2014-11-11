@@ -851,10 +851,7 @@ class Proc:
     def setdisplay(self, x):
         self.display = bool(x)
 
-    def write(self, s, interval=None):
-        if interval is not None:
-            time.sleep(interval)
-
+    def write(self, s):
         if isinstance(self.p, Popen):
             select.select([], [self.p.stdin], [])
             self.p.stdin.write(s)
@@ -991,11 +988,11 @@ class Proc:
         stdout, stderr = p.communicate()
         return stdout
 
-    def write_p64(self, s, interval=None):
-        return self.write(p64(s), interval)
+    def write_p64(self, s):
+        return self.write(p64(s))
 
-    def write_p32(self, s, interval=None):
-        return self.write(p32(s), interval)
+    def write_p32(self, s):
+        return self.write(p32(s))
 
     def read_p64(self, timeout=None):
         return p64(self.read(8, timeout))
