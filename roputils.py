@@ -847,6 +847,7 @@ class Proc:
             fd = self.p.stdout.fileno()
             fl = fcntl.fcntl(fd, fcntl.F_GETFL)
             fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+            raw_input("\x1b[32mAttach debugger to pid %d if needed. Hit enter key to continue...\x1b[0m" % self.p.pid)
 
     def setdisplay(self, x):
         self.display = bool(x)
