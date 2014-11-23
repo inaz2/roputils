@@ -3,19 +3,23 @@
 _start:
         jmp caller
 callee:
-        pop rax
-        xor rdx, rdx
-        lea rbx, [rax+1]
-        movzx rcx, byte ptr [rax]
-        add rcx, rbx
-        mov [rcx], dl
-        xor rdx, rdx
+        pop rsi
         xor rcx, rcx
-        mov cx, 0x632d               /* "-c" */
-        push rcx
-        mov rsi, rsp
+        mov cl, [rsi]
+        inc rsi
+        mov rbx, rsi
+        cld
+        rep lodsb
+        mov [rsi], cl
+main:
+        push 59
+        pop rax
+        cqo
         push rdx
-        mov rdi, 0x68732f2f6e69622f  /* "/bin//sh" */
+        pushw 0x632d
+        mov rsi, rsp
+        movabs rdi, 0x68732f2f6e69622f
+        push rdx
         push rdi
         mov rdi, rsp
         push rdx
@@ -23,11 +27,9 @@ callee:
         push rsi
         push rdi
         mov rsi, rsp
-        push 59                      /* execve */
-        pop rax
         syscall
 caller:
         call callee
-pstring:
+arg:
         .byte 2
         .ascii "ls"

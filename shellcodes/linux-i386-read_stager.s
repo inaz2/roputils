@@ -4,10 +4,12 @@ _start:
         jmp caller
 callee:
         pop ecx
-        xor ebx, ebx
-        lea edx, [ebx+1]
+        push 3
+        pop eax
+        cdq
+        mov ebx, edx
+        inc edx
         shl edx, 12
-        lea eax, [ebx+3]   /* read */
         int 0x80
         jmp stage
 caller:

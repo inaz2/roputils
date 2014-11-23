@@ -3,13 +3,13 @@
 _start:
         jmp caller
 callee:
-        pop rcx
+        pop esi
 loop:
-        xorb [rcx], 0
-        je data
-        inc rcx
+        xor byte ptr [esi], 0x00
+        jz stage
+        inc esi
         jmp loop
 caller:
         call callee
-data:
+stage:
         int3

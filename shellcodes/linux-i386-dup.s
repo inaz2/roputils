@@ -2,12 +2,11 @@
         .globl _start
 _start:
         xor edx, edx
-        lea ebx, [edx+4]   /* fd */
+        lea ebx, [edx+4]
         lea ecx, [edx+2]
 loop:
-        lea eax, [edx+63]  /* dup2 */
+        lea eax, [edx+63]
         int 0x80
         dec ecx
-        jns loop
-next:
+        jge loop
         int3

