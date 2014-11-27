@@ -663,10 +663,12 @@ class ROP(ELF):
     def fill(self, size, buf=''):
         chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
         buflen = size - len(buf)
+        assert buflen >= 0, "%d bytes over" % (-buflen,)
         return ''.join(random.choice(chars) for i in xrange(buflen))
 
     def retfill(self, size, buf=''):
         buflen = size - len(buf)
+        assert buflen >= 0, "%d bytes over" % (-buflen,)
         s = self.fill(buflen % self.wordsize)
         s += self.p(self.gadget('ret')) * (buflen // self.wordsize)
         return s
@@ -719,11 +721,12 @@ class Shellcode:
 
     def nopfill(self, code, size, buf=''):
         noppairs = self._database[self.arch]['noppairs']
-        noplen = size - len(buf) - len(code)
+        buflen = size - len(buf) - len(code)
+        assert buflen >= 0, "%d bytes over" % (-buflen,)
         buf = bytearray()
-        while len(buf) < noplen:
+        while len(buf) < buflen:
             buf += random.choice(noppairs)
-        return str(buf[:noplen] + code)
+        return str(buf[:buflen] + code)
 
     def exec_shell(self):
         return self._database[self.arch]['exec_shell']
