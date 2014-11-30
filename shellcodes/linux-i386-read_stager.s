@@ -11,8 +11,7 @@ callee:
         inc edx
         shl edx, 12
         int 0x80
-        jmp stage
+        jmp ecx
 caller:
         call callee
-stage:
         int3

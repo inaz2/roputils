@@ -7,10 +7,7 @@ callee:
         xor rcx, rcx
         mov cl, [rsi]
         inc rsi
-        mov rbx, rsi
-        cld
-        rep lodsb
-        mov [rsi], cl
+        mov [rsi+rcx], ch
 main:
         push 59
         pop rax
@@ -20,7 +17,7 @@ main:
         push rdi
         mov rdi, rsp
         push rdx
-        push rbx
+        push rsi
         push rdi
         mov rsi, rsp
         syscall

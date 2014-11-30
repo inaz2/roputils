@@ -9,8 +9,7 @@ callee:
         shl rdx, 12
         xor rax, rax
         syscall
-        jmp stage
+        jmp rsi
 caller:
         call callee
-stage:
         int3
