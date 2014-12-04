@@ -418,7 +418,7 @@ class ELF:
             def _f(m):
                 addr = int16(m.group(1))
                 if addr in labels and not addr in rev_symbol:
-                    return "\x1b[%dm%s\x1b[0m" % (color, labels[addr])
+                    return ",\x1b[%dm%s\x1b[0m" % (color, labels[addr])
                 else:
                     return m.group(0)
             return _f
@@ -436,7 +436,7 @@ class ELF:
             line = re.sub(r'(call\s+)([\dA-Fa-f]+)\s+<[^>]+>', repl_func1(addr, 33), line)
             line = re.sub(r'(j\w{1,2}\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[32m\\1\\2\x1b[0m', line)
             line = re.sub(r'(j\w{1,2}\s+)([\dA-Fa-f]+)\s+<[^>]+>', repl_func1(addr, 32), line)
-            line = re.sub(r'0x([\dA-Fa-f]{3,})\b', repl_func2(36), line)
+            line = re.sub(r',0x([\dA-Fa-f]{3,})\b', repl_func2(36), line)
 
             expr = line.split(':', 1)[1]
 
