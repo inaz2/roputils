@@ -47,7 +47,6 @@ class ELF:
         self._plt = {}
         self._symbol = {}
         self._load_blobs = []
-        plt_slotsize = 0x10
 
         regexp = {
             'section': r'^\s*\[(?P<Nr>[^\]]+)\]\s+(?P<Name>\S+)\s+(?P<Type>\S+)\s+(?P<Address>\S+)\s+(?P<Off>\S+)\s+(?P<Size>\S+)\s+(?P<ES>\S+)\s+(?P<Flg>\S+)\s+(?P<Lk>\S+)\s+(?P<Inf>\S+)\s+(?P<Al>\S+)$',
@@ -56,6 +55,7 @@ class ELF:
             'reloc': r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$',
             'symbol': r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>\S+)',
         }
+        plt_stub_size = 0x10
 
         p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
         line = ''
@@ -131,7 +131,7 @@ class ELF:
             if not type_.endswith('JUMP_SLOT'):
                 continue
             self._got[name] = offset
-            self._plt[name] = self._section['.plt'][0] + (plt_slotsize * (len(self._plt)+1))
+            self._plt[name] = self._section['.plt'][0] + (plt_stub_size * (len(self._plt)+1))
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
         while line and not line.startswith('Version symbols section'):  # read Symbol table
@@ -339,7 +339,7 @@ class ELF:
                 except ValueError:
                     break
 
-                p = Popen(['objdump', '-w', '-M', 'intel', '-D', '--start-address='+str(virtaddr+i-pos), self.fpath], stdout=PIPE)
+                p = Popen(['objdump', '-w', '-M', 'intel', '-D', "--start-address=%d" % (virtaddr+i-pos), self.fpath], stdout=PIPE)
                 stdout, stderr = p.communicate()
 
                 print
@@ -493,16 +493,18 @@ class ELF:
 
 class ROP(ELF):
     def call(self, addr, *args):
-        if len(args) > 4:
-            raise Exception("over 4 args is unsupported: %d" % len(args))
+        if isinstance(addr, str):
+            addr = self.plt(addr)
 
         if self.wordsize == 8:
-            regs = ['rdi', 'rsi', 'rdx', 'rcx']
+            regs = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
             buf = ''
             for i, arg in enumerate(args):
                 buf += self.p(self.gadget('pop', regs[i]))
                 buf += self.p(arg)
             buf += self.p(addr)
+            for arg in args[6:]:
+                buf += self.p(addr)
             return buf
         else:
             buf = self.p(addr)
@@ -510,9 +512,6 @@ class ROP(ELF):
             for arg in args:
                 buf += self.p(arg)
             return buf
-
-    def call_plt(self, name, *args):
-        return self.call(self.plt(name), *args)
 
     def call_chain_ptr(self, *calls, **kwargs):
         if self.wordsize != 8:
@@ -550,6 +549,9 @@ class ROP(ELF):
                 raise Exception("1st argument should be less than 2^32: %x" % args[1])
 
             ptr = args.pop(0)
+            if isinstance(ptr, str):
+                ptr = self.got(ptr)
+
             buf += self.junk()
             buf += p64(0) + p64(1) + p64(ptr)
             if not args_reversed:
@@ -571,12 +573,6 @@ class ROP(ELF):
         else:
             buf += p64(0) * 6
         return buf
-
-    def call_chain_plt(self, *calls, **kwargs):
-        ary = []
-        for call in calls:
-            ary.append([self.got(call[0])] + call[1:])
-        return self.call_chain_ptr(*ary, **kwargs)
 
     def dl_resolve(self, base, name, *args, **kwargs):
         def align(x, origin, size):
@@ -735,10 +731,10 @@ class Shellcode:
         noppairs = self._database[self.arch]['noppairs']
         buflen = size - len(buf) - len(code)
         assert buflen >= 0, "%d bytes over" % (-buflen,)
-        buf = bytearray()
+        buf = ''
         while len(buf) < buflen:
             buf += random.choice(noppairs)
-        return str(buf[:buflen] + code)
+        return buf[:buflen] + code
 
     def exec_shell(self):
         return self._database[self.arch]['exec_shell']
