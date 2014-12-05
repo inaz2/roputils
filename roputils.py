@@ -181,11 +181,14 @@ class ELF:
         return self.base + self._symbol[name]
 
     def str(self, name):
-        return self.search(name + '\x00', include_no_executable=True)
+        return self.search(name + '\x00')
 
-    def search(self, s, include_no_executable=False, regexp=False):
+    def search(self, s, xonly=False, regexp=False):
+        if not isinstance(s, str):
+            s = self.p(s)
+
         for virtaddr, blob, is_executable in self._load_blobs:
-            if not include_no_executable and not is_executable:
+            if xonly and not is_executable:
                 continue
             if regexp:
                 m = re.search(s, blob)
@@ -212,7 +215,7 @@ class ELF:
             'syscall': '\x0f\x05',
         }
         if keyword in table:
-            return self.search(table[keyword])
+            return self.search(table[keyword], xonly=True)
 
         regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
         if reg:
@@ -229,28 +232,28 @@ class ELF:
                     chunk = '\x41' + chr(0x58+(r-8)) + '\xc3'
                 else:
                     chunk = chr(0x58+r) + '\xc3'
-                return self.search(chunk)
+                return self.search(chunk, xonly=True)
             else:
                 # skip rsp
-                return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x41[\x58-\x5f]){%d}\xc3" % n, regexp=True)
+                return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x41[\x58-\x5f]){%d}\xc3" % n, xonly=True, regexp=True)
         elif keyword == 'jmp':
             if r >= 8:
                 chunk = '\x41\xff' + chr(0xe0+(r-8))
             else:
                 chunk = '\xff' + chr(0xe0+r)
-            return self.search(chunk)
+            return self.search(chunk, xonly=True)
         elif keyword == 'call':
             if r >= 8:
                 chunk = '\x41\xff' + chr(0xd0+(r-8))
             else:
                 chunk = '\xff' + chr(0xd0+r)
-            return self.search(chunk)
+            return self.search(chunk, xonly=True)
         elif keyword == 'push':
             if r >= 8:
                 chunk = '\x41' + chr(0x50+(r-8)) + '\xc3'
             else:
                 chunk = chr(0x50+r) + '\xc3'
-            return self.search(chunk)
+            return self.search(chunk, xonly=True)
         elif keyword == 'pivot':
             # chunk1: xchg REG, rsp
             # chunk2: xchg rsp, REG
@@ -269,13 +272,10 @@ class ELF:
                 else:
                     chunk1 = '\x87' + chr(0xe0+r) + '\xc3'
                 chunk2 = '\x87' + chr(0xc4+8*r) + '\xc3'
-            try:
-                return self.search(chunk1)
-            except ValueError:
-                return self.search(chunk2)
+            return self.search("(?:%s|%s)" % (chunk1, chunk2), xonly=True, regexp=True)
         else:
             # search directly
-            return self.search(keyword)
+            return self.search(keyword, xonly=True)
 
     def checksec(self):
         result = ''
