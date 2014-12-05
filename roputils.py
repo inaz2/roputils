@@ -15,15 +15,18 @@ from subprocess import Popen, PIPE
 from contextlib import contextmanager
 
 
+def int16(x):
+    return int(x, 16)
+
 def p32(x):
     if isinstance(x, str):
-        return struct.unpack_from('<I', x)[0]
+        return struct.unpack('<I', x)[0]
     else:
         return struct.pack('<I', x)
 
 def p64(x):
     if isinstance(x, str):
-        return struct.unpack_from('<Q', x)[0]
+        return struct.unpack('<Q', x)[0]
     else:
         return struct.pack('<Q', x)
 
@@ -46,6 +49,14 @@ class ELF:
         self._load_blobs = []
         plt_slotsize = 0x10
 
+        regexp = {
+            'section': r'^\s*\[(?P<Nr>[^\]]+)\]\s+(?P<Name>\S+)\s+(?P<Type>\S+)\s+(?P<Address>\S+)\s+(?P<Off>\S+)\s+(?P<Size>\S+)\s+(?P<ES>\S+)\s+(?P<Flg>\S+)\s+(?P<Lk>\S+)\s+(?P<Inf>\S+)\s+(?P<Al>\S+)$',
+            'program': r'^\s*(?P<Type>\S+)\s+(?P<Offset>\S+)\s+(?P<VirtAddr>\S+)\s+(?P<PhysAddr>\S+)\s+(?P<FileSiz>\S+)\s+(?P<MemSiz>\S+)\s+(?P<Flg>.{3})\s+(?P<Align>\S+)$',
+            'dynamic': r'^\s*(?P<Tag>\S+)\s+\((?P<Type>[^)]+)\)\s+(?P<Value>.+)$',
+            'reloc': r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$',
+            'symbol': r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>\S+)',
+        }
+
         p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
         line = ''
         while line != 'Section Headers:\n':  # read ELF Header
@@ -65,22 +76,22 @@ class ELF:
                 if value == 'DYN (Shared object file)':
                     self.sec['pie'] = True
             elif key == 'Entry point address':
-                self._entry_point = int(value, 16)
+                self._entry_point = int16(value)
         while line != 'Program Headers:\n':  # read Section Headers
             line = p.stdout.readline()
-            m = re.search(r'^\s*\[(?P<Nr>[^\]]+)\]\s+(?P<Name>\S+)\s+(?P<Type>\S+)\s+(?P<Address>\S+)\s+(?P<Off>\S+)\s+(?P<Size>\S+)\s+(?P<ES>\S+)\s+(?P<Flg>\S+)\s+(?P<Lk>\S+)\s+(?P<Inf>\S+)\s+(?P<Al>\S+)$', line)
+            m = re.search(regexp['section'], line)
             if not m or m.group('Nr') == 'Nr':
                 continue
             name = m.group('Name')
-            address, size = [int(x, 16) for x in m.group('Address', 'Size')]
+            address, size = map(int16, m.group('Address', 'Size'))
             self._section[name] = (address, size)
         while not line.startswith('Dynamic section') and line != 'There is no dynamic section in this file.\n':  # read Program Headers
             line = p.stdout.readline()
-            m = re.search(r'^\s*(?P<Type>\S+)\s+(?P<Offset>\S+)\s+(?P<VirtAddr>\S+)\s+(?P<PhysAddr>\S+)\s+(?P<FileSiz>\S+)\s+(?P<MemSiz>\S+)\s+(?P<Flg>.{3})\s+(?P<Align>\S+)$', line)
+            m = re.search(regexp['program'], line)
             if not m or m.group('Type') == 'Type':
                 continue
             type_, flg = m.group('Type', 'Flg')
-            offset, virtaddr, filesiz = [int(x, 16) for x in m.group('Offset', 'VirtAddr', 'FileSiz')]
+            offset, virtaddr, filesiz = map(int16, m.group('Offset', 'VirtAddr', 'FileSiz'))
             if type_ == 'GNU_RELRO':
                 self.sec['relro'] = True
             elif type_ == 'GNU_STACK':
@@ -94,7 +105,7 @@ class ELF:
                 self._load_blobs.append((virtaddr, blob, is_executable))
         while not (line.startswith('Relocation section') and '.plt' in line):  # read Dynamic section
             line = p.stdout.readline()
-            m = re.search(r'^\s*(?P<Tag>\S+)\s+\((?P<Type>[^)]+)\)\s+(?P<Value>.+)$', line)
+            m = re.search(regexp['dynamic'], line)
             if not m or m.group('Tag') == 'Tag':
                 continue
             type_, value = m.group('Type', 'Value')
@@ -107,16 +118,16 @@ class ELF:
             elif type_ == 'DEBUG':
                 self.sec['dt_debug'] = True
             if value.startswith('0x'):
-                self._dynamic[type_] = int(value, 16)
+                self._dynamic[type_] = int16(value)
             elif value.endswith(' (bytes)'):
                 self._dynamic[type_] = int(value.split()[0])
         while not line.startswith('Symbol table'):  # read Relocation section (.rel.plt/.rela.plt)
             line = p.stdout.readline()
-            m = re.search(r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$', line)
+            m = re.search(regexp['reloc'], line)
             if not m or m.group('Offset') == 'Offset':
                 continue
             type_, name = m.group('Type', 'Name')
-            offset = int(m.group('Offset'), 16)
+            offset = int16(m.group('Offset'))
             if not type_.endswith('JUMP_SLOT'):
                 continue
             self._got[name] = offset
@@ -125,13 +136,12 @@ class ELF:
                 self.sec['stack_canary'] = True
         while line and not line.startswith('Version symbols section'):  # read Symbol table
             line = p.stdout.readline()
-            m = re.search(r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>\S+)', line)
+            m = re.search(regexp['symbol'], line)
             if not m or m.group('Num') == 'Num':
                 continue
             if m.group('Ndx') == 'UND':
                 continue
-            name = m.group('Name')
-            value = int(m.group('Value'), 16)
+            name, value = m.group('Name'), int16(m.group('Value'))
             self._symbol[name] = value
             if '@@' in name:
                 default_name = name.split('@@')[0]
@@ -360,7 +370,7 @@ class ELF:
         for line in stdout.splitlines():
             ary = line.strip().split(':', 1)
             try:
-                addr, expr = int(ary[0], 16), ary[1]
+                addr, expr = int16(ary[0]), ary[1]
                 labels[addr] = None
             except ValueError:
                 addr, expr = None, None
@@ -376,18 +386,18 @@ class ELF:
 
             m = re.search(r'call\s+([\dA-Fa-f]+)\b', line)
             if m:
-                ref = int(m.group(1), 16)
+                ref = int16(m.group(1))
                 labels[ref] = "sub_%x" % ref
                 code_xrefs.setdefault(ref, set()).add(addr)
 
             m = re.search(r'j\w{1,2}\s+([\dA-Fa-f]+)\b', line)
             if m:
-                ref = int(m.group(1), 16)
+                ref = int16(m.group(1))
                 labels[ref] = "loc_%x" % ref
                 code_xrefs.setdefault(ref, set()).add(addr)
 
             for m in re.finditer(r'0x([\dA-Fa-f]{3,})\b', expr):
-                ref = int(m.group(1), 16)
+                ref = int16(m.group(1))
                 if ref in labels:
                     labels[ref] = "loc_%x" % ref
                     data_xrefs.setdefault(ref, set()).add(addr)
@@ -400,13 +410,13 @@ class ELF:
         # output with annotations
         def repl_func1(addr, color):
             def _f(m):
-                ref = int(m.group(2), 16)
+                ref = int16(m.group(2))
                 return "\x1b[%dm%s%s [%+#x]\x1b[0m" % (color, m.group(1), labels[ref], ref-addr)
             return _f
 
         def repl_func2(color):
             def _f(m):
-                addr = int(m.group(1), 16)
+                addr = int16(m.group(1))
                 if addr in labels and not addr in rev_symbol:
                     return "\x1b[%dm%s\x1b[0m" % (color, labels[addr])
                 else:
@@ -435,13 +445,13 @@ class ELF:
                 if not addr in rev_symbol and not addr in rev_plt:
                     if labels[addr].startswith('loc_'):
                         label += "\x1b[32m%s:\x1b[0m" % labels[addr]
-                        label += ' ' * (78-len(label)+9)
+                        label = label.ljust(78+9)
                     else:
                         label += '\n'
                         label += "\x1b[33m%s:\x1b[0m" % labels[addr]
-                        label += ' ' * (78-len(label)+9+1)
+                        label = label.ljust(78+10)
                 else:
-                    label += ' ' * 78
+                    label = label.ljust(78)
                 if addr in code_xrefs:
                     ary = ["%x%s" % (x, arrows[x < addr]) for x in code_xrefs[addr]]
                     label += " \x1b[32m; CODE XREF: %s\x1b[0m" % ', '.join(ary)
@@ -455,7 +465,7 @@ class ELF:
 
             annotations = []
             for m in re.finditer(r'([\dA-Fa-f]{3,})\b', expr):
-                ref = int(m.group(1), 16)
+                ref = int16(m.group(1))
 
                 if 0 <= ref - self._section['.data'][0] < self._section['.data'][1]:
                     annotations.append('[.data]')
@@ -569,7 +579,7 @@ class ROP(ELF):
         return self.call_chain_ptr(*ary, **kwargs)
 
     def dl_resolve(self, base, name, *args, **kwargs):
-        def align(x, origin=0, size=0):
+        def align(x, origin, size):
             pad = size - ((x-origin) % size)
             return (x+pad, pad)
 
@@ -607,7 +617,9 @@ class ROP(ELF):
             syment = self.dynamic('SYMENT')
             strtab = self.dynamic('STRTAB')
 
-            addr_reloc = base + self.wordsize*(3+len(args))
+            arg_values = ''.join(self.p(arg) for arg in args)
+
+            addr_reloc, pad_reloc = align(base + self.wordsize*3 + len(arg_values), jmprel, relent)
             addr_sym, pad_sym = align(addr_reloc+relent, symtab, syment)
             addr_symstr = addr_sym + syment
             addr_end = addr_symstr + len(name) + 1
@@ -619,11 +631,11 @@ class ROP(ELF):
             buf = self.p(self.plt())
             buf += self.p(reloc_offset)
             buf += self.p(kwargs.get('retaddr', addr_end))
-            for arg in args:
-                buf += self.p(arg)
-            buf += struct.pack('<II', self.section('.bss'), r_info)  # Elf32_Rel
+            buf += arg_values
+            buf += self.fill(pad_reloc)
+            buf += struct.pack('<II', self.section('.bss'), r_info)      # Elf32_Rel
             buf += self.fill(pad_sym)
-            buf += struct.pack('<IIII', st_name, 0, 0, 0x12)         # Elf32_Sym
+            buf += struct.pack('<IIII', st_name, 0, 0, 0x12)             # Elf32_Sym
             buf += self.string(name)
 
         return buf
@@ -1003,7 +1015,7 @@ class Pattern:
     @classmethod
     def offset(cls, s):
         if s.startswith('0x'):
-            addr = int(s, 16)
+            addr = int16(s)
             if addr >> 32:
                 chunk = p64(addr)
             else:
