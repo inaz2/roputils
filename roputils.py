@@ -1040,8 +1040,7 @@ class Asm:
         else:
             raise Exception('unsupported architecture')
 
-        with tempfile.NamedTemporaryFile(delete=False) as f:
-            f.flush()
+        with tempfile.NamedTemporaryFile() as f:
             p = Popen(['as', option, '--msyntax=intel', '--mnaked-reg', '-o', f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             stdout, stderr = p.communicate(s+'\n')
             if stderr:
@@ -1049,9 +1048,8 @@ class Asm:
                 return
             p = Popen(['objdump', '-w', '-M', 'intel', '-d', f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
-            for line in stdout.splitlines()[7:]:
-                print line
-            os.remove(f.name)
+            result = ''.join(stdout.splitlines(True)[7:])
+            return result
 
     @classmethod
     def disassemble(cls, blob, arch):
@@ -1067,8 +1065,8 @@ class Asm:
             f.flush()
             p = Popen(['objdump', '-w', '-b', 'binary', '-m', machine, '-M', options, '-D', f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
-            for line in stdout.splitlines()[7:]:
-                print line
+            result = ''.join(stdout.splitlines(True)[7:])
+            return result
 
 
 if __name__ == '__main__':
@@ -1107,11 +1105,11 @@ if __name__ == '__main__':
             data = sys.stdin.read()
             if re.search(r'^[\s\dA-Fa-f]*$', data):
                 data = ''.join(data.split()).decode('hex')
-            Asm.disassemble(data, arch)
+            print Asm.disassemble(data, arch).rstrip()
         else:
             arch = sys.argv[2] if len(sys.argv) > 2 else 'i386'
             data = sys.stdin.read()
-            Asm.assemble(data, arch)
+            print Asm.assemble(data, arch).rstrip()
     elif cmd == 'objdump':
         fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
         ELF(fpath).objdump()

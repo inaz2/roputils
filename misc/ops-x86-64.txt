@@ -1,0 +1,256 @@
+	...
+   0:	01 00                	add    DWORD PTR [rax],eax
+   0:	02 00                	add    al,BYTE PTR [rax]
+   0:	03 00                	add    eax,DWORD PTR [rax]
+   0:	04 00                	add    al,0x0
+   0:	05 00 00 00 00       	add    eax,0x0
+   0:	06                   	(bad)  
+   0:	07                   	(bad)  
+   0:	08 00                	or     BYTE PTR [rax],al
+   0:	09 00                	or     DWORD PTR [rax],eax
+   0:	0a 00                	or     al,BYTE PTR [rax]
+   0:	0b 00                	or     eax,DWORD PTR [rax]
+   0:	0c 00                	or     al,0x0
+   0:	0d 00 00 00 00       	or     eax,0x0
+   0:	0e                   	(bad)  
+   0:	0f 00 00             	sldt   WORD PTR [rax]
+   0:	10 00                	adc    BYTE PTR [rax],al
+   0:	11 00                	adc    DWORD PTR [rax],eax
+   0:	12 00                	adc    al,BYTE PTR [rax]
+   0:	13 00                	adc    eax,DWORD PTR [rax]
+   0:	14 00                	adc    al,0x0
+   0:	15 00 00 00 00       	adc    eax,0x0
+   0:	16                   	(bad)  
+   0:	17                   	(bad)  
+   0:	18 00                	sbb    BYTE PTR [rax],al
+   0:	19 00                	sbb    DWORD PTR [rax],eax
+   0:	1a 00                	sbb    al,BYTE PTR [rax]
+   0:	1b 00                	sbb    eax,DWORD PTR [rax]
+   0:	1c 00                	sbb    al,0x0
+   0:	1d 00 00 00 00       	sbb    eax,0x0
+   0:	1e                   	(bad)  
+   0:	1f                   	(bad)  
+   0:	20 00                	and    BYTE PTR [rax],al
+   0:	21 00                	and    DWORD PTR [rax],eax
+   0:	22 00                	and    al,BYTE PTR [rax]
+   0:	23 00                	and    eax,DWORD PTR [rax]
+   0:	24 00                	and    al,0x0
+   0:	25 00 00 00 00       	and    eax,0x0
+   0:	26 00 00             	add    BYTE PTR es:[rax],al
+   0:	27                   	(bad)  
+   0:	28 00                	sub    BYTE PTR [rax],al
+   0:	29 00                	sub    DWORD PTR [rax],eax
+   0:	2a 00                	sub    al,BYTE PTR [rax]
+   0:	2b 00                	sub    eax,DWORD PTR [rax]
+   0:	2c 00                	sub    al,0x0
+   0:	2d 00 00 00 00       	sub    eax,0x0
+   0:	2e 00 00             	add    BYTE PTR cs:[rax],al
+   0:	2f                   	(bad)  
+   0:	30 00                	xor    BYTE PTR [rax],al
+   0:	31 00                	xor    DWORD PTR [rax],eax
+   0:	32 00                	xor    al,BYTE PTR [rax]
+   0:	33 00                	xor    eax,DWORD PTR [rax]
+   0:	34 00                	xor    al,0x0
+   0:	35 00 00 00 00       	xor    eax,0x0
+   0:	36 00 00             	add    BYTE PTR ss:[rax],al
+   0:	37                   	(bad)  
+   0:	38 00                	cmp    BYTE PTR [rax],al
+   0:	39 00                	cmp    DWORD PTR [rax],eax
+   0:	3a 00                	cmp    al,BYTE PTR [rax]
+   0:	3b 00                	cmp    eax,DWORD PTR [rax]
+   0:	3c 00                	cmp    al,0x0
+   0:	3d 00 00 00 00       	cmp    eax,0x0
+   0:	3e 00 00             	add    BYTE PTR ds:[rax],al
+   0:	3f                   	(bad)  
+   0:	40 00 00             	add    BYTE PTR [rax],al
+   0:	41 00 00             	add    BYTE PTR [r8],al
+   0:	42 00 00             	rex.X add BYTE PTR [rax],al
+   0:	43 00 00             	rex.XB add BYTE PTR [r8],al
+   0:	44 00 00             	add    BYTE PTR [rax],r8b
+   0:	45 00 00             	add    BYTE PTR [r8],r8b
+   0:	46 00 00             	rex.RX add BYTE PTR [rax],r8b
+   0:	47 00 00             	rex.RXB add BYTE PTR [r8],r8b
+   0:	48 00 00             	rex.W add BYTE PTR [rax],al
+   0:	49 00 00             	rex.WB add BYTE PTR [r8],al
+   0:	4a 00 00             	rex.WX add BYTE PTR [rax],al
+   0:	4b 00 00             	rex.WXB add BYTE PTR [r8],al
+   0:	4c 00 00             	rex.WR add BYTE PTR [rax],r8b
+   0:	4d 00 00             	rex.WRB add BYTE PTR [r8],r8b
+   0:	4e 00 00             	rex.WRX add BYTE PTR [rax],r8b
+   0:	4f 00 00             	rex.WRXB add BYTE PTR [r8],r8b
+   0:	50                   	push   rax
+   0:	51                   	push   rcx
+   0:	52                   	push   rdx
+   0:	53                   	push   rbx
+   0:	54                   	push   rsp
+   0:	55                   	push   rbp
+   0:	56                   	push   rsi
+   0:	57                   	push   rdi
+   0:	58                   	pop    rax
+   0:	59                   	pop    rcx
+   0:	5a                   	pop    rdx
+   0:	5b                   	pop    rbx
+   0:	5c                   	pop    rsp
+   0:	5d                   	pop    rbp
+   0:	5e                   	pop    rsi
+   0:	5f                   	pop    rdi
+   0:	60                   	(bad)  
+   0:	61                   	(bad)  
+   0:	62                   	(bad)  
+   0:	63 00                	movsxd eax,DWORD PTR [rax]
+   0:	64 00 00             	add    BYTE PTR fs:[rax],al
+   0:	65 00 00             	add    BYTE PTR gs:[rax],al
+   0:	66                   	data16
+   0:	67 00 00             	add    BYTE PTR [eax],al
+   0:	68 00 00 00 00       	push   0x0
+   0:	69 00 00 00 00 00    	imul   eax,DWORD PTR [rax],0x0
+   0:	6a 00                	push   0x0
+   0:	6b 00 00             	imul   eax,DWORD PTR [rax],0x0
+   0:	6c                   	ins    BYTE PTR es:[rdi],dx
+   0:	6d                   	ins    DWORD PTR es:[rdi],dx
+   0:	6e                   	outs   dx,BYTE PTR ds:[rsi]
+   0:	6f                   	outs   dx,DWORD PTR ds:[rsi]
+   0:	70 00                	jo     0x2
+   0:	71 00                	jno    0x2
+   0:	72 00                	jb     0x2
+   0:	73 00                	jae    0x2
+   0:	74 00                	je     0x2
+   0:	75 00                	jne    0x2
+   0:	76 00                	jbe    0x2
+   0:	77 00                	ja     0x2
+   0:	78 00                	js     0x2
+   0:	79 00                	jns    0x2
+   0:	7a 00                	jp     0x2
+   0:	7b 00                	jnp    0x2
+   0:	7c 00                	jl     0x2
+   0:	7d 00                	jge    0x2
+   0:	7e 00                	jle    0x2
+   0:	7f 00                	jg     0x2
+   0:	80 00 00             	add    BYTE PTR [rax],0x0
+   0:	81 00 00 00 00 00    	add    DWORD PTR [rax],0x0
+   0:	82                   	(bad)  
+   0:	83 00 00             	add    DWORD PTR [rax],0x0
+   0:	84 00                	test   BYTE PTR [rax],al
+   0:	85 00                	test   DWORD PTR [rax],eax
+   0:	86 00                	xchg   BYTE PTR [rax],al
+   0:	87 00                	xchg   DWORD PTR [rax],eax
+   0:	88 00                	mov    BYTE PTR [rax],al
+   0:	89 00                	mov    DWORD PTR [rax],eax
+   0:	8a 00                	mov    al,BYTE PTR [rax]
+   0:	8b 00                	mov    eax,DWORD PTR [rax]
+   0:	8c 00                	mov    WORD PTR [rax],es
+   0:	8d 00                	lea    eax,[rax]
+   0:	8e 00                	mov    es,WORD PTR [rax]
+   0:	8f 00                	pop    QWORD PTR [rax]
+   0:	90                   	nop
+   0:	91                   	xchg   ecx,eax
+   0:	92                   	xchg   edx,eax
+   0:	93                   	xchg   ebx,eax
+   0:	94                   	xchg   esp,eax
+   0:	95                   	xchg   ebp,eax
+   0:	96                   	xchg   esi,eax
+   0:	97                   	xchg   edi,eax
+   0:	98                   	cwde   
+   0:	99                   	cdq    
+   0:	9a                   	(bad)  
+   0:	9b                   	fwait
+   0:	9c                   	pushf  
+   0:	9d                   	popf   
+   0:	9e                   	sahf   
+   0:	9f                   	lahf   
+   0:	a0 00 00 00 00 00 00 00 00 	movabs al,ds:0x0
+   0:	a1 00 00 00 00 00 00 00 00 	movabs eax,ds:0x0
+   0:	a2 00 00 00 00 00 00 00 00 	movabs ds:0x0,al
+   0:	a3 00 00 00 00 00 00 00 00 	movabs ds:0x0,eax
+   0:	a4                   	movs   BYTE PTR es:[rdi],BYTE PTR ds:[rsi]
+   0:	a5                   	movs   DWORD PTR es:[rdi],DWORD PTR ds:[rsi]
+   0:	a6                   	cmps   BYTE PTR ds:[rsi],BYTE PTR es:[rdi]
+   0:	a7                   	cmps   DWORD PTR ds:[rsi],DWORD PTR es:[rdi]
+   0:	a8 00                	test   al,0x0
+   0:	a9 00 00 00 00       	test   eax,0x0
+   0:	aa                   	stos   BYTE PTR es:[rdi],al
+   0:	ab                   	stos   DWORD PTR es:[rdi],eax
+   0:	ac                   	lods   al,BYTE PTR ds:[rsi]
+   0:	ad                   	lods   eax,DWORD PTR ds:[rsi]
+   0:	ae                   	scas   al,BYTE PTR es:[rdi]
+   0:	af                   	scas   eax,DWORD PTR es:[rdi]
+   0:	b0 00                	mov    al,0x0
+   0:	b1 00                	mov    cl,0x0
+   0:	b2 00                	mov    dl,0x0
+   0:	b3 00                	mov    bl,0x0
+   0:	b4 00                	mov    ah,0x0
+   0:	b5 00                	mov    ch,0x0
+   0:	b6 00                	mov    dh,0x0
+   0:	b7 00                	mov    bh,0x0
+   0:	b8 00 00 00 00       	mov    eax,0x0
+   0:	b9 00 00 00 00       	mov    ecx,0x0
+   0:	ba 00 00 00 00       	mov    edx,0x0
+   0:	bb 00 00 00 00       	mov    ebx,0x0
+   0:	bc 00 00 00 00       	mov    esp,0x0
+   0:	bd 00 00 00 00       	mov    ebp,0x0
+   0:	be 00 00 00 00       	mov    esi,0x0
+   0:	bf 00 00 00 00       	mov    edi,0x0
+   0:	c0 00 00             	rol    BYTE PTR [rax],0x0
+   0:	c1 00 00             	rol    DWORD PTR [rax],0x0
+   0:	c2 00 00             	ret    0x0
+   0:	c3                   	ret    
+   0:	c4                   	(bad)  
+   0:	c5 00 00             	(bad)  
+   0:	c6 00 00             	mov    BYTE PTR [rax],0x0
+   0:	c7 00 00 00 00 00    	mov    DWORD PTR [rax],0x0
+   0:	c8 00 00 00          	enter  0x0,0x0
+   0:	c9                   	leave  
+   0:	ca 00 00             	retf   0x0
+   0:	cb                   	retf   
+   0:	cc                   	int3   
+   0:	cd 00                	int    0x0
+   0:	ce                   	(bad)  
+   0:	cf                   	iret   
+   0:	d0 00                	rol    BYTE PTR [rax],1
+   0:	d1 00                	rol    DWORD PTR [rax],1
+   0:	d2 00                	rol    BYTE PTR [rax],cl
+   0:	d3 00                	rol    DWORD PTR [rax],cl
+   0:	d4                   	(bad)  
+   0:	d5                   	(bad)  
+   0:	d6                   	(bad)  
+   0:	d7                   	xlat   BYTE PTR ds:[rbx]
+   0:	d8 00                	fadd   DWORD PTR [rax]
+   0:	d9 00                	fld    DWORD PTR [rax]
+   0:	da 00                	fiadd  DWORD PTR [rax]
+   0:	db 00                	fild   DWORD PTR [rax]
+   0:	dc 00                	fadd   QWORD PTR [rax]
+   0:	dd 00                	fld    QWORD PTR [rax]
+   0:	de 00                	fiadd  WORD PTR [rax]
+   0:	df 00                	fild   WORD PTR [rax]
+   0:	e0 00                	loopne 0x2
+   0:	e1 00                	loope  0x2
+   0:	e2 00                	loop   0x2
+   0:	e3 00                	jrcxz  0x2
+   0:	e4 00                	in     al,0x0
+   0:	e5 00                	in     eax,0x0
+   0:	e6 00                	out    0x0,al
+   0:	e7 00                	out    0x0,eax
+   0:	e8 00 00 00 00       	call   0x5
+   0:	e9 00 00 00 00       	jmp    0x5
+   0:	ea                   	(bad)  
+   0:	eb 00                	jmp    0x2
+   0:	ec                   	in     al,dx
+   0:	ed                   	in     eax,dx
+   0:	ee                   	out    dx,al
+   0:	ef                   	out    dx,eax
+   0:	f0 00 00             	lock add BYTE PTR [rax],al
+   0:	f1                   	icebp  
+   0:	f2 00 00             	repnz add BYTE PTR [rax],al
+   0:	f3 00 00             	repz add BYTE PTR [rax],al
+   0:	f4                   	hlt    
+   0:	f5                   	cmc    
+   0:	f6 00 00             	test   BYTE PTR [rax],0x0
+   0:	f7 00 00 00 00 00    	test   DWORD PTR [rax],0x0
+   0:	f8                   	clc    
+   0:	f9                   	stc    
+   0:	fa                   	cli    
+   0:	fb                   	sti    
+   0:	fc                   	cld    
+   0:	fd                   	std    
+   0:	fe 00                	inc    BYTE PTR [rax]
+   0:	ff 00                	inc    DWORD PTR [rax]
