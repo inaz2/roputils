@@ -60,6 +60,8 @@ class ELF:
             'symbol': r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>\S+)',
         }
         plt_stub_size = 0x10
+        has_dynamic_section = True
+        has_symbol_table = True
 
         p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
         line = ''
@@ -89,8 +91,11 @@ class ELF:
             name = m.group('Name')
             address, size = map(int16, m.group('Address', 'Size'))
             self._section[name] = (address, size)
-        while not line.startswith('Dynamic section') and line != 'There is no dynamic section in this file.\n':  # read Program Headers
+        while not line.startswith('Dynamic section'):  # read Program Headers
             line = p.stdout.readline()
+            if line == 'There is no dynamic section in this file.\n':
+                has_dynamic_section = False
+                break
             m = re.search(regexp['program'], line)
             if not m or m.group('Type') == 'Type':
                 continue
@@ -107,7 +112,7 @@ class ELF:
                     blob = f.read(filesiz)
                 is_executable = ('E' in flg)
                 self._load_blobs.append((virtaddr, blob, is_executable))
-        while not (line.startswith('Relocation section') and '.plt' in line):  # read Dynamic section
+        while has_dynamic_section and not (line.startswith('Relocation section') and '.plt' in line):  # read Dynamic section
             line = p.stdout.readline()
             m = re.search(regexp['dynamic'], line)
             if not m or m.group('Tag') == 'Tag':
@@ -127,6 +132,9 @@ class ELF:
                 self._dynamic[type_] = int(value.split()[0])
         while not line.startswith('Symbol table'):  # read Relocation section (.rel.plt/.rela.plt)
             line = p.stdout.readline()
+            if line == 'No version information found in this file.\n':
+                has_symbol_table = False
+                break
             m = re.search(regexp['reloc'], line)
             if not m or m.group('Offset') == 'Offset':
                 continue
@@ -138,8 +146,10 @@ class ELF:
             self._plt[name] = self._section['.plt'][0] + (plt_stub_size * (len(self._plt)+1))
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
-        while line and not line.startswith('Version symbols section'):  # read Symbol table
+        while has_symbol_table and not line.startswith('Version symbols section'):  # read Symbol table
             line = p.stdout.readline()
+            if not line:
+                break
             m = re.search(regexp['symbol'], line)
             if not m or m.group('Num') == 'Num':
                 continue
