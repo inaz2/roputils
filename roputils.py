@@ -21,12 +21,16 @@ def int16(x):
 def p32(x):
     if isinstance(x, str):
         return struct.unpack('<I', x)[0]
+    elif isinstance(x, (list, tuple)):
+        return struct.pack('<' + ('I'*len(x)), *x)
     else:
         return struct.pack('<I', x)
 
 def p64(x):
     if isinstance(x, str):
         return struct.unpack('<Q', x)[0]
+    elif isinstance(x, (list, tuple)):
+        return struct.pack('<' + ('Q'*len(x)), *x)
     else:
         return struct.pack('<Q', x)
 
@@ -500,17 +504,14 @@ class ROP(ELF):
             regs = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
             buf = ''
             for i, arg in enumerate(args):
-                buf += self.p(self.gadget('pop', regs[i]))
-                buf += self.p(arg)
+                buf += self.p([self.gadget('pop', regs[i]), arg])
             buf += self.p(addr)
-            for arg in args[6:]:
-                buf += self.p(addr)
+            buf += self.p(args[6:])
             return buf
         else:
             buf = self.p(addr)
             buf += self.p(self.gadget('pop', n=len(args)))
-            for arg in args:
-                buf += self.p(arg)
+            buf += self.p(args)
             return buf
 
     def call_chain_ptr(self, *calls, **kwargs):
@@ -613,7 +614,7 @@ class ROP(ELF):
             syment = self.dynamic('SYMENT')
             strtab = self.dynamic('STRTAB')
 
-            arg_values = ''.join(self.p(arg) for arg in args)
+            arg_values = self.p(args)
 
             addr_reloc, pad_reloc = align(base + self.wordsize*3 + len(arg_values), jmprel, relent)
             addr_sym, pad_sym = align(addr_reloc+relent, symtab, syment)
@@ -639,26 +640,25 @@ class ROP(ELF):
     def syscall(self, number, *args):
         if self.wordsize == 8:
             arg_regs = ['rdi', 'rsi', 'rdx', 'r10', 'r8', 'r9']
-            buf = self.p(self.gadget('pop', 'rax')) + self.p(number)
+            buf = self.p([self.gadget('pop', 'rax'), number])
             for arg_reg, arg in zip(arg_regs, args):
-                buf += self.p(self.gadget('pop', arg_reg)) + self.p(arg)
+                buf += self.p([self.gadget('pop', arg_reg), arg])
             buf += self.p(self.gadget('syscall'))
         else:
             try:
                 # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
                 args = list(args) + [0] * (6-len(args))
-                buf = self.p(self.gadget('popad')) + struct.pack('<IIIIIIII', args[4], args[3], args[5], 0, args[0], args[2], args[1], number)
+                buf = self.p([self.gadget('popad'), args[4], args[3], args[5], 0, args[0], args[2], args[1], number])
             except ValueError:
                 arg_regs = ['ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp']
-                buf = self.p(self.gadget('pop', 'eax')) + self.p(number)
+                buf = self.p([self.gadget('pop', 'eax'), number])
                 for arg_reg, arg in zip(arg_regs, args):
-                    buf += self.p(self.gadget('pop', arg_reg)) + self.p(arg)
+                    buf += self.p([self.gadget('pop', arg_reg), arg])
             buf += self.p(self.gadget('int0x80'))
         return buf
 
     def pivot(self, rsp):
-        buf = self.p(self.gadget('pop', 'rbp'))
-        buf += self.p(rsp - self.wordsize)
+        buf = self.p([self.gadget('pop', 'rbp'), rsp-self.wordsize])
         buf += self.p(self.gadget('leave'))
         return buf
 
