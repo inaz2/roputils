@@ -64,9 +64,11 @@ class ELF:
         has_symbol_table = True
 
         p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
-        line = ''
-        while line != 'Section Headers:\n':  # read ELF Header
+        # read ELF Header
+        while True:
             line = p.stdout.readline()
+            if line == 'Section Headers:\n':
+                break
             m = re.search(r'^\s*(?P<key>[^:]+):\s+(?P<value>.+)$', line)
             if not m:
                 continue
@@ -83,17 +85,24 @@ class ELF:
                     self.sec['pie'] = True
             elif key == 'Entry point address':
                 self._entry_point = int16(value)
-        while line != 'Program Headers:\n':  # read Section Headers
+        # read Section Headers
+        while True:
             line = p.stdout.readline()
+            if line == 'Program Headers:\n':
+                break
             m = re.search(regexp['section'], line)
             if not m or m.group('Nr') == 'Nr':
                 continue
             name = m.group('Name')
             address, size = map(int16, m.group('Address', 'Size'))
             self._section[name] = (address, size)
-        while not line.startswith('Dynamic section'):  # read Program Headers
+        # read Program Headers
+        while True:
             line = p.stdout.readline()
-            if line == 'There is no dynamic section in this file.\n':
+            if line.startswith('Dynamic section'):
+                has_dynamic_section = True
+                break
+            elif line == 'There is no dynamic section in this file.\n':
                 has_dynamic_section = False
                 break
             m = re.search(regexp['program'], line)
@@ -112,8 +121,11 @@ class ELF:
                     blob = f.read(filesiz)
                 is_executable = ('E' in flg)
                 self._load_blobs.append((virtaddr, blob, is_executable))
-        while has_dynamic_section and not (line.startswith('Relocation section') and '.plt' in line):  # read Dynamic section
+        # read Dynamic section
+        while has_dynamic_section:
             line = p.stdout.readline()
+            if line.startswith('Relocation section') and '.plt' in line:
+                break
             m = re.search(regexp['dynamic'], line)
             if not m or m.group('Tag') == 'Tag':
                 continue
@@ -130,9 +142,13 @@ class ELF:
                 self._dynamic[type_] = int16(value)
             elif value.endswith(' (bytes)'):
                 self._dynamic[type_] = int(value.split()[0])
-        while not line.startswith('Symbol table'):  # read Relocation section (.rel.plt/.rela.plt)
+        # read Relocation section (.rel.plt/.rela.plt)
+        while True:
             line = p.stdout.readline()
-            if line == 'No version information found in this file.\n':
+            if line.startswith('Symbol table'):
+                has_symbol_table = True
+                break
+            elif line == 'No version information found in this file.\n':
                 has_symbol_table = False
                 break
             m = re.search(regexp['reloc'], line)
@@ -146,9 +162,10 @@ class ELF:
             self._plt[name] = self._section['.plt'][0] + (plt_stub_size * (len(self._plt)+1))
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
-        while has_symbol_table and not line.startswith('Version symbols section'):  # read Symbol table
+        # read Symbol table
+        while has_symbol_table:
             line = p.stdout.readline()
-            if not line:
+            if line.startswith('Version symbols section') or line == 'No version information found in this file.\n':
                 break
             m = re.search(regexp['symbol'], line)
             if not m or m.group('Num') == 'Num':
@@ -368,6 +385,10 @@ class ELF:
         p = Popen(['objdump', '-M', 'intel', '-d', self.fpath], stdout=PIPE)
         stdout, stderr = p.communicate()
 
+        p = Popen(['strings', '-tx', fpath], stdout=PIPE)
+        rev_string = dict((int16(line[:7].strip()), line[8:-1]) for line in p.stdout)
+        p.wait()
+
         rev_symbol = {}
         rev_plt = {}
         for k, v in self._symbol.iteritems():
@@ -398,19 +419,19 @@ class ELF:
             if addr == self._entry_point:
                 labels[addr] = '_start'
 
-            m = re.search(r'call\s+([\dA-Fa-f]+)\b', line)
+            m = re.search(r'call\s+(?:0x)?([\dA-Fa-f]+)\b', line)
             if m:
                 ref = int16(m.group(1))
                 labels[ref] = "sub_%x" % ref
                 code_xrefs.setdefault(ref, set()).add(addr)
 
-            m = re.search(r'j\w{1,2}\s+([\dA-Fa-f]+)\b', line)
+            m = re.search(r'j\w{1,2}\s+(?:0x)?([\dA-Fa-f]+)\b', line)
             if m:
                 ref = int16(m.group(1))
                 labels[ref] = "loc_%x" % ref
                 code_xrefs.setdefault(ref, set()).add(addr)
 
-            for m in re.finditer(r'0x([\dA-Fa-f]{3,})\b', expr):
+            for m in re.finditer(r',0x([\dA-Fa-f]{3,})\b', expr):
                 ref = int16(m.group(1))
                 if ref in labels:
                     labels[ref] = "loc_%x" % ref
@@ -447,9 +468,9 @@ class ELF:
                 continue
 
             line = re.sub(r'(call\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[33m\\1\\2\x1b[0m', line)
-            line = re.sub(r'(call\s+)([\dA-Fa-f]+)\s+<[^>]+>', repl_func1(addr, 33), line)
+            line = re.sub(r'(call\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr, 33), line)
             line = re.sub(r'(j\w{1,2}\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[32m\\1\\2\x1b[0m', line)
-            line = re.sub(r'(j\w{1,2}\s+)([\dA-Fa-f]+)\s+<[^>]+>', repl_func1(addr, 32), line)
+            line = re.sub(r'(j\w{1,2}\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr, 32), line)
             line = re.sub(r',0x([\dA-Fa-f]{3,})\b', repl_func2(36), line)
 
             expr = line.split(':', 1)[1]
@@ -458,12 +479,11 @@ class ELF:
             if labels[addr]:
                 if not addr in rev_symbol and not addr in rev_plt:
                     if labels[addr].startswith('loc_'):
-                        label += "\x1b[32m%s:\x1b[0m" % labels[addr]
-                        label = label.ljust(78+9)
+                        color = 32
                     else:
-                        label += '\n'
-                        label += "\x1b[33m%s:\x1b[0m" % labels[addr]
-                        label = label.ljust(78+10)
+                        color = 33
+                    label += "\x1b[%dm%s:\x1b[0m" % (color, labels[addr])
+                    label = label.ljust(78+9)
                 else:
                     label = label.ljust(78)
                 if addr in code_xrefs:
@@ -490,11 +510,10 @@ class ELF:
                     annotations.append(', '.join(rev_symbol[ref]))
 
                 for virtaddr, blob, is_exebutable in self._load_blobs:
-                    if 0 <= ref - virtaddr < len(blob):
-                        m = re.search(r'^([\s\x20-\x7e]+)\x00', blob[(ref - virtaddr):])
-                        if m:
-                            annotations.append(repr(m.group(1)))
-                            break
+                    offset = ref - virtaddr
+                    if offset in rev_string:
+                        annotations.append(repr(rev_string[offset]))
+                        break
 
             if annotations:
                 print "%-70s \x1b[30;1m; %s\x1b[0m" % (line, ' '.join(annotations))
