@@ -1069,15 +1069,15 @@ class Asm:
         else:
             raise Exception('unsupported architecture')
 
-        with tempfile.NamedTemporaryFile() as f:
+        with tempfile.NamedTemporaryFile(delete=False) as f:
             p = Popen(['as', option, '--msyntax=intel', '--mnaked-reg', '-o', f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             stdout, stderr = p.communicate(s+'\n')
             if stderr:
-                sys.stderr.write(stderr)
-                return
+                return stderr
             p = Popen(['objdump', '-w', '-M', 'intel', '-d', f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
             result = ''.join(stdout.splitlines(True)[7:])
+            os.remove(f.name)
             return result
 
     @classmethod
