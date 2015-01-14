@@ -322,7 +322,13 @@ class ELF:
         result += self.fpath
 
         print 'RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE'
-        print result
+        print "%s\n" % result
+
+        fortified_funcs = [name for name in self._plt if name.endswith('_chk')]
+        if fortified_funcs:
+            print "FORTIFY_SOURCE: \033[32mFortified\033[m (%s)" % ', '.join(fortified_funcs)
+        else:
+            print 'FORTIFY_SOURCE: \033[31mNo\033[m'
 
     def list_gadgets(self):
         if self.wordsize == 8:
