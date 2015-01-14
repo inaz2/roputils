@@ -34,6 +34,9 @@ def p64(x):
     else:
         return struct.pack('<Q', x)
 
+def randint(nbytes):
+    return random.getrandbits(nbytes * 8)
+
 
 class ELF:
     def __init__(self, fpath, base=0):
@@ -963,6 +966,7 @@ class Proc:
                 sys.stdout.write(self.read())
                 self.write('exec /bin/sh <&2 >&2\n')
             self.p.wait()
+            return self.p.returncode
         else:
             if redirect_fd is not None:
                 self.write(check_cmd + '\n')
