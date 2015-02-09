@@ -37,6 +37,11 @@ def p64(x):
 def randint(nbytes):
     return random.getrandbits(nbytes * 8)
 
+def popen_clocale(*args, **kwargs):
+    newenv = os.environ.copy()
+    newenv["LC_MESSAGES"] = "C"
+    kwargs["env"] = newenv
+    return Popen(*args, **kwargs)
 
 class ELF:
     def __init__(self, fpath, base=0):
@@ -66,7 +71,7 @@ class ELF:
         has_dynamic_section = True
         has_symbol_table = True
 
-        p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
+        p = popen_clocale(['readelf', '-W', '-a', fpath], stdout=PIPE)
         # read ELF Header
         while True:
             line = p.stdout.readline()
