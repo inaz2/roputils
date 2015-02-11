@@ -40,6 +40,11 @@ def randint(nbytes):
 
 class ELF:
     def __init__(self, fpath, base=0):
+        def env_with(d):
+            env = os.environ.copy()
+            env.update(d)
+            return env
+
         self.fpath = fpath
         self.base = base
         self.sec = dict(relro=False, bind_now=False, stack_canary=False, nx=False, pie=False, rpath=False, runpath=False, dt_debug=False)
@@ -66,7 +71,7 @@ class ELF:
         has_dynamic_section = True
         has_symbol_table = True
 
-        p = Popen(['readelf', '-W', '-a', fpath], stdout=PIPE)
+        p = Popen(['readelf', '-W', '-a', fpath], env=env_with({"LC_MESSAGES": "C"}), stdout=PIPE)
         # read ELF Header
         while True:
             line = p.stdout.readline()
