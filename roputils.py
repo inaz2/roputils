@@ -1119,7 +1119,7 @@ class Asm:
 
 
 if __name__ == '__main__':
-    fmt_usage = "Usage: python %s [checksec|create|offset|gadget|scan|asm|objdump] ..."
+    fmt_usage = "Usage: python %s [checksec|create|offset|gadget|scan|sc|asm|objdump] ..."
 
     if len(sys.argv) < 2:
         print >>sys.stderr, fmt_usage % sys.argv[0]
@@ -1148,6 +1148,11 @@ if __name__ == '__main__':
         pos = int(sys.argv[3]) if len(sys.argv) > 3 else 0
         fpath = sys.argv[4] if len(sys.argv) > 4 else 'a.out'
         ELF(fpath).scan_gadgets(chunk, pos)
+    elif cmd == 'sc':
+        arch, kind = sys.argv[2].split('/', 1)
+        args = [int(x) if x.isdigit() else x for x in sys.argv[3:]]
+        s = getattr(Shellcode(arch), kind).__call__(*args)
+        print ''.join("\\x%02x" % ord(x) for x in s)
     elif cmd == 'asm':
         if len(sys.argv) > 2 and sys.argv[2] == '-d':
             arch = sys.argv[3] if len(sys.argv) > 3 else 'i386'

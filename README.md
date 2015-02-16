@@ -25,6 +25,7 @@ roputils.py also can be used as CLI tool, has 7 subcommands: checksec, create, o
 * offset: call Pattern.offset()
 * gadget: availability check for tiny gadgets
 * scan: search the binary chunk and disassemble from there
+* sc: output shellcode as hexstring
 * asm: x86 and x64 assembler/disassembler
 * objdump: disassemble with IDA-like annotations
 
