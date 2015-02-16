@@ -17,7 +17,8 @@ main:
         lea ebx, [edx+1]
         lea esi, [edx+1]
         shl esi, 16
-        lea eax, [edx+187]
+        lea eax, [edx+68]
+        not al
         int 0x80                # sendfile
         xor ebx, ebx
         lea eax, [edx+1]
