@@ -198,26 +198,29 @@ class ELF:
         if ref_symbol:
             self.base -= self._symbol[ref_symbol]
 
+    def offset(self, offset):
+        return self.base + offset
+
     def section(self, name):
-        return self.base + self._section[name][0]
+        return self.offset(self._section[name][0])
 
     def dynamic(self, name):
-        return self.base + self._dynamic[name]
+        return self.offset(self._dynamic[name])
 
     def got(self, name=None):
         if name:
-            return self.base + self._got[name]
+            return self.offset(self._got[name])
         else:
             return self.dynamic('PLTGOT')
 
     def plt(self, name=None):
         if name:
-            return self.base + self._plt[name]
+            return self.offset(self._plt[name])
         else:
-            return self.base + self._section['.plt'][0]
+            return self.offset(self._section['.plt'][0])
 
     def addr(self, name):
-        return self.base + self._symbol[name]
+        return self.offset(self._symbol[name])
 
     def str(self, name):
         return self.search(name + '\x00')
@@ -232,11 +235,11 @@ class ELF:
             if regexp:
                 m = re.search(s, blob)
                 if m:
-                    return self.base + virtaddr + m.start()
+                    return self.offset(virtaddr + m.start())
             else:
                 try:
                     i = blob.index(s)
-                    return self.base + virtaddr + i
+                    return self.offset(virtaddr + i)
                 except ValueError:
                     pass
         else:
