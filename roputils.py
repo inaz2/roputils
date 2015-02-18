@@ -966,7 +966,7 @@ class Proc:
     def writeline(self, s):
         return self.write(s+'\n')
 
-    def interact(self, redirect_fd=None):
+    def wait(self, redirect_fd=None):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
 
         self.setdisplay(False)

