@@ -894,9 +894,6 @@ class Proc:
             if kwargs.get('debug', False):
                 raw_input("\x1b[32mpid %d is running, attach the debugger if needed. Hit enter key to continue...\x1b[0m" % self.p.pid)
 
-    def setdisplay(self, x):
-        self.display = bool(x)
-
     def write(self, s):
         if isinstance(self.p, Popen):
             select.select([], [self.p.stdin], [])
@@ -968,8 +965,6 @@ class Proc:
 
     def wait(self, redirect_fd=None):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
-
-        self.setdisplay(False)
 
         buf = self.read()
         sys.stdout.write(buf)
