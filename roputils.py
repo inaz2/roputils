@@ -692,14 +692,14 @@ class ROP(ELF):
             buf += self.p(self.gadget('syscall'))
         else:
             try:
-                # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
-                args = list(args) + [0] * (6-len(args))
-                buf = self.p([self.gadget('popad'), args[4], args[3], args[5], 0, args[0], args[2], args[1], number])
-            except ValueError:
                 arg_regs = ['ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp']
                 buf = self.p([self.gadget('pop', 'eax'), number])
                 for arg_reg, arg in zip(arg_regs, args):
                     buf += self.p([self.gadget('pop', arg_reg), arg])
+            except ValueError:
+                # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
+                args = list(args) + [0] * (6-len(args))
+                buf = self.p([self.gadget('popad'), args[4], args[3], args[5], 0, args[0], args[2], args[1], number])
             buf += self.p(self.gadget('int0x80'))
         return buf
 
