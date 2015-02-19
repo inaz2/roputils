@@ -909,7 +909,14 @@ class Proc:
 
     def read(self, size=-1, timeout=None):
         if size < 0:
-            return self.read_all(timeout=timeout)
+            chunk_size = 8192
+            buf = ''
+            while True:
+                chunk = self.read(chunk_size, timeout)
+                buf += chunk
+                if len(chunk) < chunk_size:
+                    break
+            return buf
 
         if timeout is None:
             timeout = self.timeout
@@ -934,15 +941,6 @@ class Proc:
             sys.stdout.write("\x1b[36m%s\x1b[0m" % printable)  # cyan
             sys.stdout.flush()
 
-        return buf
-
-    def read_all(self, chunk_size=8192, timeout=None):
-        buf = ''
-        while True:
-            chunk = self.read(chunk_size, timeout)
-            buf += chunk
-            if len(chunk) < chunk_size:
-                break
         return buf
 
     def read_until(self, s):
