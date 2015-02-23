@@ -9,7 +9,10 @@ loop:
         jz stage
         inc rsi
         jmp loop
-        nop                     # to avoid "jz stage" contains LF
+        nop
+        nop
+        nop
+        nop
 caller:
         call callee
 stage:

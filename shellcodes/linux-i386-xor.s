@@ -9,6 +9,12 @@ loop:
         jz stage
         inc esi
         jmp loop
+        nop
+        nop
+        nop
+        nop
+        nop
+        nop
 caller:
         call callee
 stage:
