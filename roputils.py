@@ -313,6 +313,10 @@ class ELF:
                     chunk1 = prefix + '\x87' + chr(0xe0+r) + '\xc3'
                 chunk2 = prefix + '\x87' + chr(0xc4+8*r) + '\xc3'
             return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
+        elif keyword == 'loop':
+            chunk1 = '\xeb\xfe'
+            chunk2 = '\xe9\xfb\xff\xff\xff'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
         else:
             # search directly
             return self.search(keyword, xonly=True)
@@ -365,7 +369,7 @@ class ELF:
             print
 
         print "%8s" % 'etc',
-        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall']:
+        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall', 'loop']:
             try:
                 self.gadget(keyword)
                 print "\033[32m%s\033[m" % keyword,
