@@ -245,6 +245,9 @@ class ELF:
             raise ValueError()
 
     def gadget(self, keyword, reg=None, n=1):
+        def regexp_or(*args):
+            return '(?:' + '|'.join(map(re.escape, args)) + ')'
+
         table = {
             'pushad': '\x60\xc3',  # i386 only
             'popad': '\x61\xc3',   # i386 only
@@ -262,58 +265,54 @@ class ELF:
         if reg:
             try:
                 r = regs.index('r'+reg[1:])
+                need_prefix = bool(r >= 8)
+                if need_prefix:
+                    r -= 8
             except ValueError:
                 raise Exception("unexpected register: %r" % reg)
         else:
             r = regs.index('rsp')
+            need_prefix = False
 
         if keyword == 'pop':
             if reg:
-                if r >= 8:
-                    chunk = '\x41' + chr(0x58+(r-8)) + '\xc3'
-                else:
-                    chunk = chr(0x58+r) + '\xc3'
-                return self.search(chunk, xonly=True)
+                prefix = '\x41' if need_prefix else ''
+                chunk1 = prefix + chr(0x58+r) + '\xc3'
+                chunk2 = prefix + '\x8f' + chr(0xc0+r) + '\xc3'
+                return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
             else:
                 # skip rsp
-                return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x41[\x58-\x5f]){%d}\xc3" % n, xonly=True, regexp=True)
-        elif keyword == 'jmp':
-            if r >= 8:
-                chunk = '\x41\xff' + chr(0xe0+(r-8))
-            else:
-                chunk = '\xff' + chr(0xe0+r)
-            return self.search(chunk, xonly=True)
+                if self.wordsize == 8:
+                    return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]|\x41(?:[\x58-\x5f]|\x8f[\xc0-\xc7])){%d}\xc3" % n, xonly=True, regexp=True)
+                else:
+                    return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]){%d}\xc3" % n, xonly=True, regexp=True)
         elif keyword == 'call':
-            if r >= 8:
-                chunk = '\x41\xff' + chr(0xd0+(r-8))
-            else:
-                chunk = '\xff' + chr(0xd0+r)
+            prefix = '\x41' if need_prefix else ''
+            chunk = prefix + '\xff' + chr(0xd0+r)
+            return self.search(chunk, xonly=True)
+        elif keyword == 'jmp':
+            prefix = '\x41' if need_prefix else ''
+            chunk = prefix + '\xff' + chr(0xe0+r)
             return self.search(chunk, xonly=True)
         elif keyword == 'push':
-            if r >= 8:
-                chunk = '\x41' + chr(0x50+(r-8)) + '\xc3'
-            else:
-                chunk = chr(0x50+r) + '\xc3'
-            return self.search(chunk, xonly=True)
+            prefix = '\x41' if need_prefix else ''
+            chunk1 = prefix + chr(0x50+r) + '\xc3'
+            chunk2 = prefix + '\xff' + chr(0xf0+r) + '\xc3'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
         elif keyword == 'pivot':
             # chunk1: xchg REG, rsp
             # chunk2: xchg rsp, REG
-            if r >= 8:
-                chunk1 = '\x49\x87' + chr(0xe0+(r-8)) + '\xc3'
-                chunk2 = '\x4c\x87' + chr(0xc4+8*(r-8)) + '\xc3'
-            elif reg[0] == 'r':
-                if r == 0:
-                    chunk1 = '\x48\x94\xc3'
-                else:
-                    chunk1 = '\x48\x87' + chr(0xe0+r) + '\xc3'
-                chunk2 = '\x48\x87' + chr(0xc4+8*r) + '\xc3'
+            if need_prefix:
+                chunk1 = '\x49\x87' + chr(0xe0+r) + '\xc3'
+                chunk2 = '\x4c\x87' + chr(0xc4+8*r) + '\xc3'
             else:
+                prefix = '\x48' if (reg[0] == 'r') else ''
                 if r == 0:
-                    chunk1 = '\x94\xc3'
+                    chunk1 = prefix + '\x94\xc3'
                 else:
-                    chunk1 = '\x87' + chr(0xe0+r) + '\xc3'
-                chunk2 = '\x87' + chr(0xc4+8*r) + '\xc3'
-            return self.search("(?:%s|%s)" % (chunk1, chunk2), xonly=True, regexp=True)
+                    chunk1 = prefix + '\x87' + chr(0xe0+r) + '\xc3'
+                chunk2 = prefix + '\x87' + chr(0xc4+8*r) + '\xc3'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
         else:
             # search directly
             return self.search(keyword, xonly=True)
