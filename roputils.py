@@ -1062,7 +1062,7 @@ class Proc:
 
 class Pattern:
     @classmethod
-    def generate(self):
+    def generate(cls):
         for x in xrange(0x41, 0x5b):
             for y in xrange(0x61, 0x7b):
                 for z in xrange(0x30, 0x3a):
