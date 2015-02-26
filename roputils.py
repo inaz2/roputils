@@ -334,7 +334,7 @@ class ELF:
         print 'RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE'
         print "%s\n" % result
 
-        fortified_funcs = [name for name in self._plt if name.endswith('_chk')]
+        fortified_funcs = [name for name in self._plt if re.search(r'^__\w+_chk$', name)]
         if fortified_funcs:
             print "FORTIFY_SOURCE: \033[32mFortified\033[m (%s)" % ', '.join(fortified_funcs)
         else:
