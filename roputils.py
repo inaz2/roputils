@@ -389,15 +389,18 @@ class ELF:
                 except ValueError:
                     break
 
-                p = Popen(['objdump', '-w', '-M', 'intel', '-D', "--start-address=%d" % (virtaddr+i-pos), self.fpath], stdout=PIPE)
+                disasm_option = 'intel,x86-64' if self.wordsize == 8 else 'intel,i386'
+                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+i-pos), self.fpath], stdout=PIPE)
                 stdout, stderr = p.communicate()
 
-                print
-                for line in stdout.splitlines()[6:]:
-                    if not line:
-                        break
+                lines = stdout.splitlines()[7:]
+                if '(bad)' in lines[0]:
+                    continue
+
+                for line in lines:
                     print line
-                    if '(bad)' in line:
+                    if 'ret' in line or 'jmp' in line or '(bad)' in line or '...' in line:
+                        print '-' * 80
                         break
 
     def objdump(self):
