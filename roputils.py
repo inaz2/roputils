@@ -377,20 +377,14 @@ class ELF:
                 print "\033[31m%s\033[m" % keyword,
         print
 
-    def scan_gadgets(self, chunk, pos=0):
+    def scan_gadgets(self, regexp):
         for virtaddr, blob, is_executable in self._load_blobs:
             if not is_executable:
                 continue
 
-            i = -1
-            while True:
-                try:
-                    i = blob.index(chunk, i+1)
-                except ValueError:
-                    break
-
+            for m in re.finditer(regexp, blob):
                 disasm_option = 'intel,x86-64' if self.wordsize == 8 else 'intel,i386'
-                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+i-pos), self.fpath], stdout=PIPE)
+                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+m.start()), self.fpath], stdout=PIPE)
                 stdout, stderr = p.communicate()
 
                 lines = stdout.splitlines()[7:]
@@ -1169,12 +1163,11 @@ if __name__ == '__main__':
         ELF(fpath).list_gadgets()
     elif cmd == 'scan':
         if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: python %s scan HEX_LIST [POS [FILE]]" % sys.argv[0]
+            print >>sys.stderr, "Usage: python %s scan REGEXP [FILE]" % sys.argv[0]
             sys.exit(1)
-        chunk = sys.argv[2].replace(' ', '').decode('hex')
-        pos = int(sys.argv[3]) if len(sys.argv) > 3 else 0
-        fpath = sys.argv[4] if len(sys.argv) > 4 else 'a.out'
-        ELF(fpath).scan_gadgets(chunk, pos)
+        regexp = sys.argv[2]
+        fpath = sys.argv[3] if len(sys.argv) > 3 else 'a.out'
+        ELF(fpath).scan_gadgets(regexp)
     elif cmd == 'sc':
         arch, kind = sys.argv[2].split('/', 1)
         args = [int(x) if x.isdigit() else x for x in sys.argv[3:]]
