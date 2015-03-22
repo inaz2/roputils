@@ -1157,18 +1157,26 @@ class Asm(object):
     @classmethod
     def assemble(cls, s, arch):
         if arch == 'i386':
-            option = '--32'
+            cmd_as = ['as', '--32', '--msyntax=intel', '--mnaked-reg', '-o']
+            cmd_objdump = ['objdump', '-w', '-M', 'intel', '-d']
         elif arch == 'x86-64':
-            option = '--64'
+            cmd_as = ['as', '--64', '--msyntax=intel', '--mnaked-reg', '-o']
+            cmd_objdump = ['objdump', '-w', '-M', 'intel', '-d']
+        elif arch == 'arm':
+            cmd_as = ['as', '-o']
+            cmd_objdump = ['objdump', '-w', '-d']
+        elif arch == 'thumb':
+            cmd_as = ['as', '-mthumb', '-o']
+            cmd_objdump = ['objdump', '-w', '-d']
         else:
             raise Exception('unsupported architecture')
 
         with tempfile.NamedTemporaryFile(delete=False) as f:
-            p = Popen(['as', option, '--msyntax=intel', '--mnaked-reg', '-o', f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            p = Popen(cmd_as + [f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             stdout, stderr = p.communicate(s+'\n')
             if stderr:
                 return stderr
-            p = Popen(['objdump', '-w', '-M', 'intel', '-d', f.name], stdout=PIPE)
+            p = Popen(cmd_objdump + [f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
             result = ''.join(stdout.splitlines(True)[7:])
             os.remove(f.name)
@@ -1177,16 +1185,20 @@ class Asm(object):
     @classmethod
     def disassemble(cls, blob, arch):
         if arch == 'i386':
-            (machine, options) = ('i386', 'intel')
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel', '-D'] 
         elif arch == 'x86-64':
-            (machine, options) = ('i386', 'intel,x86-64')
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel,x86-64', '-D'] 
+        elif arch == 'arm':
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-EB', '-D'] 
+        elif arch == 'thumb':
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-M', 'force-thumb', '-EB', '-D'] 
         else:
             raise Exception('unsupported architecture')
 
         with tempfile.NamedTemporaryFile() as f:
             f.write(blob)
             f.flush()
-            p = Popen(['objdump', '-w', '-b', 'binary', '-m', machine, '-M', options, '-D', f.name], stdout=PIPE)
+            p = Popen(cmd_objdump + [f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
             result = ''.join(stdout.splitlines(True)[7:])
             return result
