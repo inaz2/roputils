@@ -90,10 +90,23 @@ class ELF:
                 elif value == 'ELF32':
                     self.wordsize = 4
                 else:
-                    raise Exception("unsupported ELF class: %s" % value)
+                    raise Exception("unsupported ELF Class: %s" % value)
             elif key == 'Type':
                 if value == 'DYN (Shared object file)':
                     self.sec['pie'] = True
+                elif value == 'EXEC (Executable file)':
+                    self.sec['pie'] = False
+                else:
+                    raise Exception("unsupported ELF Type: %s" % value)
+            elif key == 'Machine':
+                if value == 'Advanced Micro Devices X86-64':
+                    self.arch = 'x86-64'
+                elif value == 'Intel 80386':
+                    self.arch = 'i386'
+                elif value == 'ARM':
+                    self.arch = 'arm'
+                else:
+                    raise Exception("unsupported ELF Machine: %s" % value)
             elif key == 'Entry point address':
                 self._entry_point = int16(value)
         # read Section Headers
