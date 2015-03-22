@@ -196,12 +196,6 @@ class ELF:
                 self._symbol[default_name] = value
         p.wait()
 
-    def p(self, x):
-        if self.wordsize == 8:
-            return p64(x)
-        else:
-            return p32(x)
-
     def set_base(self, addr, ref_symbol=None):
         self.base = addr
         if ref_symbol:
@@ -234,103 +228,6 @@ class ELF:
     def str(self, name):
         return self.search(name + '\x00')
 
-    def search(self, s, xonly=False, regexp=False):
-        if not isinstance(s, str):
-            s = self.p(s)
-
-        for virtaddr, blob, is_executable in self._load_blobs:
-            if xonly and not is_executable:
-                continue
-            if regexp:
-                m = re.search(s, blob)
-                if m:
-                    return self.offset(virtaddr + m.start())
-            else:
-                try:
-                    i = blob.index(s)
-                    return self.offset(virtaddr + i)
-                except ValueError:
-                    pass
-        else:
-            raise ValueError()
-
-    def gadget(self, keyword, reg=None, n=1):
-        def regexp_or(*args):
-            return '(?:' + '|'.join(map(re.escape, args)) + ')'
-
-        table = {
-            'pushad': '\x60\xc3',  # i386 only
-            'popad': '\x61\xc3',   # i386 only
-            'leave': '\xc9\xc3',
-            'ret': '\xc3',
-            'int3': '\xcc',
-            'int0x80': '\xcd\x80',
-            'call_gs': '\x65\xff\x15\x10\x00\x00\x00',
-            'syscall': '\x0f\x05',
-        }
-        if keyword in table:
-            return self.search(table[keyword], xonly=True)
-
-        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
-        if reg:
-            try:
-                r = regs.index('r'+reg[1:])
-                need_prefix = bool(r >= 8)
-                if need_prefix:
-                    r -= 8
-            except ValueError:
-                raise Exception("unexpected register: %r" % reg)
-        else:
-            r = regs.index('rsp')
-            need_prefix = False
-
-        if keyword == 'pop':
-            if reg:
-                prefix = '\x41' if need_prefix else ''
-                chunk1 = prefix + chr(0x58+r) + '\xc3'
-                chunk2 = prefix + '\x8f' + chr(0xc0+r) + '\xc3'
-                return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
-            else:
-                # skip rsp
-                if self.wordsize == 8:
-                    return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]|\x41(?:[\x58-\x5f]|\x8f[\xc0-\xc7])){%d}\xc3" % n, xonly=True, regexp=True)
-                else:
-                    return self.search(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]){%d}\xc3" % n, xonly=True, regexp=True)
-        elif keyword == 'call':
-            prefix = '\x41' if need_prefix else ''
-            chunk = prefix + '\xff' + chr(0xd0+r)
-            return self.search(chunk, xonly=True)
-        elif keyword == 'jmp':
-            prefix = '\x41' if need_prefix else ''
-            chunk = prefix + '\xff' + chr(0xe0+r)
-            return self.search(chunk, xonly=True)
-        elif keyword == 'push':
-            prefix = '\x41' if need_prefix else ''
-            chunk1 = prefix + chr(0x50+r) + '\xc3'
-            chunk2 = prefix + '\xff' + chr(0xf0+r) + '\xc3'
-            return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
-        elif keyword == 'pivot':
-            # chunk1: xchg REG, rsp
-            # chunk2: xchg rsp, REG
-            if need_prefix:
-                chunk1 = '\x49\x87' + chr(0xe0+r) + '\xc3'
-                chunk2 = '\x4c\x87' + chr(0xc4+8*r) + '\xc3'
-            else:
-                prefix = '\x48' if (reg[0] == 'r') else ''
-                if r == 0:
-                    chunk1 = prefix + '\x94\xc3'
-                else:
-                    chunk1 = prefix + '\x87' + chr(0xe0+r) + '\xc3'
-                chunk2 = prefix + '\x87' + chr(0xc4+8*r) + '\xc3'
-            return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
-        elif keyword == 'loop':
-            chunk1 = '\xeb\xfe'
-            chunk2 = '\xe9\xfb\xff\xff\xff'
-            return self.search(regexp_or(chunk1, chunk2), xonly=True, regexp=True)
-        else:
-            # search directly
-            return self.search(keyword, xonly=True)
-
     def checksec(self):
         result = ''
         if self.sec['relro']:
@@ -352,60 +249,6 @@ class ELF:
             print "FORTIFY_SOURCE: \033[32mFortified\033[m (%s)" % ', '.join(fortified_funcs)
         else:
             print 'FORTIFY_SOURCE: \033[31mNo\033[m'
-
-    def list_gadgets(self):
-        if self.wordsize == 8:
-            regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
-        else:
-            regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
-
-        print "%8s" % 'pop',
-        for i in range(6):
-            try:
-                self.gadget('pop', n=i+1)
-                print "\033[32m%d\033[m" % (i+1),
-            except ValueError:
-                print "\033[31m%d\033[m" % (i+1),
-        print
-
-        for keyword in ['pop', 'jmp', 'call', 'push', 'pivot']:
-            print "%8s" % keyword,
-            for reg in regs:
-                try:
-                    self.gadget(keyword, reg)
-                    print "\033[32m%s\033[m" % reg,
-                except ValueError:
-                    print "\033[31m%s\033[m" % reg,
-            print
-
-        print "%8s" % 'etc',
-        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall', 'loop']:
-            try:
-                self.gadget(keyword)
-                print "\033[32m%s\033[m" % keyword,
-            except ValueError:
-                print "\033[31m%s\033[m" % keyword,
-        print
-
-    def scan_gadgets(self, regexp):
-        for virtaddr, blob, is_executable in self._load_blobs:
-            if not is_executable:
-                continue
-
-            for m in re.finditer(regexp, blob):
-                disasm_option = 'intel,x86-64' if self.wordsize == 8 else 'intel,i386'
-                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+m.start()), self.fpath], stdout=PIPE)
-                stdout, stderr = p.communicate()
-
-                lines = stdout.splitlines()[7:]
-                if '(bad)' in lines[0]:
-                    continue
-
-                for line in lines:
-                    print line
-                    if 'ret' in line or 'jmp' in line or '(bad)' in line or '...' in line:
-                        print '-' * 80
-                        break
 
     def objdump(self):
         p = Popen(['objdump', '-M', 'intel', '-d', self.fpath], stdout=PIPE)
@@ -551,6 +394,163 @@ class ELF:
 
 
 class ROP(ELF):
+    def p(self, x):
+        if self.wordsize == 8:
+            return p64(x)
+        else:
+            return p32(x)
+
+    def search(self, s, xonly=False):
+        if isinstance(s, int):
+            s = self.p(s)
+
+        for virtaddr, blob, is_executable in self._load_blobs:
+            if xonly and not is_executable:
+                continue
+            if isinstance(s, re._pattern_type):
+                m = re.search(s, blob)
+                if m:
+                    return self.offset(virtaddr + m.start())
+            else:
+                try:
+                    i = blob.index(s)
+                    return self.offset(virtaddr + i)
+                except ValueError:
+                    pass
+        else:
+            raise ValueError()
+
+    def gadget(self, keyword, reg=None, n=1):
+        def regexp_or(*args):
+            return re.compile('(?:' + '|'.join(map(re.escape, args)) + ')')
+
+        table = {
+            'pushad': '\x60\xc3',  # i386 only
+            'popad': '\x61\xc3',   # i386 only
+            'leave': '\xc9\xc3',
+            'ret': '\xc3',
+            'int3': '\xcc',
+            'int0x80': '\xcd\x80',
+            'call_gs': '\x65\xff\x15\x10\x00\x00\x00',
+            'syscall': '\x0f\x05',
+        }
+        if keyword in table:
+            return self.search(table[keyword], xonly=True)
+
+        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
+        if reg:
+            try:
+                r = regs.index('r'+reg[1:])
+                need_prefix = bool(r >= 8)
+                if need_prefix:
+                    r -= 8
+            except ValueError:
+                raise Exception("unexpected register: %r" % reg)
+        else:
+            r = regs.index('rsp')
+            need_prefix = False
+
+        if keyword == 'pop':
+            if reg:
+                prefix = '\x41' if need_prefix else ''
+                chunk1 = prefix + chr(0x58+r) + '\xc3'
+                chunk2 = prefix + '\x8f' + chr(0xc0+r) + '\xc3'
+                return self.search(regexp_or(chunk1, chunk2), xonly=True)
+            else:
+                # skip rsp
+                if self.wordsize == 8:
+                    return self.search(re.compile(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]|\x41(?:[\x58-\x5f]|\x8f[\xc0-\xc7])){%d}\xc3" % n), xonly=True)
+                else:
+                    return self.search(re.compile(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]){%d}\xc3" % n), xonly=True)
+        elif keyword == 'call':
+            prefix = '\x41' if need_prefix else ''
+            chunk = prefix + '\xff' + chr(0xd0+r)
+            return self.search(chunk, xonly=True)
+        elif keyword == 'jmp':
+            prefix = '\x41' if need_prefix else ''
+            chunk = prefix + '\xff' + chr(0xe0+r)
+            return self.search(chunk, xonly=True)
+        elif keyword == 'push':
+            prefix = '\x41' if need_prefix else ''
+            chunk1 = prefix + chr(0x50+r) + '\xc3'
+            chunk2 = prefix + '\xff' + chr(0xf0+r) + '\xc3'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True)
+        elif keyword == 'pivot':
+            # chunk1: xchg REG, rsp
+            # chunk2: xchg rsp, REG
+            if need_prefix:
+                chunk1 = '\x49\x87' + chr(0xe0+r) + '\xc3'
+                chunk2 = '\x4c\x87' + chr(0xc4+8*r) + '\xc3'
+            else:
+                prefix = '\x48' if (reg[0] == 'r') else ''
+                if r == 0:
+                    chunk1 = prefix + '\x94\xc3'
+                else:
+                    chunk1 = prefix + '\x87' + chr(0xe0+r) + '\xc3'
+                chunk2 = prefix + '\x87' + chr(0xc4+8*r) + '\xc3'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True)
+        elif keyword == 'loop':
+            chunk1 = '\xeb\xfe'
+            chunk2 = '\xe9\xfb\xff\xff\xff'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True)
+        else:
+            # search directly
+            return self.search(keyword, xonly=True)
+
+    def list_gadgets(self):
+        if self.wordsize == 8:
+            regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
+        else:
+            regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
+
+        print "%8s" % 'pop',
+        for i in range(6):
+            try:
+                self.gadget('pop', n=i+1)
+                print "\033[32m%d\033[m" % (i+1),
+            except ValueError:
+                print "\033[31m%d\033[m" % (i+1),
+        print
+
+        for keyword in ['pop', 'jmp', 'call', 'push', 'pivot']:
+            print "%8s" % keyword,
+            for reg in regs:
+                try:
+                    self.gadget(keyword, reg)
+                    print "\033[32m%s\033[m" % reg,
+                except ValueError:
+                    print "\033[31m%s\033[m" % reg,
+            print
+
+        print "%8s" % 'etc',
+        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall', 'loop']:
+            try:
+                self.gadget(keyword)
+                print "\033[32m%s\033[m" % keyword,
+            except ValueError:
+                print "\033[31m%s\033[m" % keyword,
+        print
+
+    def scan_gadgets(self, regexp):
+        for virtaddr, blob, is_executable in self._load_blobs:
+            if not is_executable:
+                continue
+
+            for m in re.finditer(regexp, blob):
+                disasm_option = 'intel,x86-64' if self.wordsize == 8 else 'intel,i386'
+                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+m.start()), self.fpath], stdout=PIPE)
+                stdout, stderr = p.communicate()
+
+                lines = stdout.splitlines()[7:]
+                if '(bad)' in lines[0]:
+                    continue
+
+                for line in lines:
+                    print line
+                    if 'ret' in line or 'jmp' in line or '(bad)' in line or '...' in line:
+                        print '-' * 80
+                        break
+
     def call(self, addr, *args):
         if isinstance(addr, str):
             addr = self.plt(addr)
@@ -1183,14 +1183,14 @@ if __name__ == '__main__':
         print Pattern.offset(sys.argv[2])
     elif cmd == 'gadget':
         fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
-        ELF(fpath).list_gadgets()
+        ROP(fpath).list_gadgets()
     elif cmd == 'scan':
         if len(sys.argv) < 3:
             print >>sys.stderr, "Usage: python %s scan REGEXP [FILE]" % sys.argv[0]
             sys.exit(1)
         regexp = sys.argv[2]
         fpath = sys.argv[3] if len(sys.argv) > 3 else 'a.out'
-        ELF(fpath).scan_gadgets(regexp)
+        ROP(fpath).scan_gadgets(regexp)
     elif cmd == 'sc':
         arch, kind = sys.argv[2].split('/', 1)
         args = [int(x) if x.isdigit() else x for x in sys.argv[3:]]
