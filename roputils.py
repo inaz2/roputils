@@ -989,6 +989,23 @@ class Proc:
     def writeline(self, s):
         return self.write(s+'\n')
 
+    def shutdown(self, writeonly=False):
+        if isinstance(self.p, Popen):
+            self.p.stdin.close()
+            if not writeonly:
+                self.p.stdout.close()
+        else:
+            if writeonly:
+                self.p.shutdown(socket.SHUT_WR)
+            else:
+                self.p.shutdown(socket.SHUT_RDWR)
+
+    def close(self):
+        if isinstance(self.p, Popen):
+            self.p.terminate()
+        else:
+            self.p.close()
+
     def wait(self, redirect_fd=None):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
 
@@ -1039,13 +1056,6 @@ class Proc:
         t.interact()
         t.close()
         self.close()
-
-    def close(self):
-        if isinstance(self.p, Popen):
-            self.p.terminate()
-            self.p.wait()
-        else:
-            self.p.close()
 
     def pipe_output(self, *args):
         if isinstance(self.p, Popen):
