@@ -595,7 +595,7 @@ class ROP(ELF):
         else:
             raise Exception('gadget not found')
 
-        buf = p64(set_regs)
+        buf = self.p(set_regs)
 
         for args in calls:
             if len(args) > 4:
@@ -608,25 +608,25 @@ class ROP(ELF):
                 ptr = self.got(ptr)
 
             buf += self.junk()
-            buf += p64(0) + p64(1) + p64(ptr)
+            buf += self.p([0, 1, ptr])
             if not args_reversed:
                 for arg in args:
-                    buf += p64(arg)
+                    buf += self.p(arg)
                 buf += self.junk(3-len(args))
             else:
                 buf += self.junk(3-len(args))
                 for arg in reversed(args):
-                    buf += p64(arg)
-            buf += p64(call_r12)
+                    buf += self.p(arg)
+            buf += self.p(call_r12)
 
         buf += self.junk()
         if 'pivot' in kwargs:
-            buf += p64(0)
-            buf += p64(kwargs['pivot'] - self.wordsize)
-            buf += p64(0) * 4
-            buf += p64(self.gadget('leave'))
+            buf += self.p(0)
+            buf += self.p(kwargs['pivot'] - self.wordsize)
+            buf += self.p(0) * 4
+            buf += self.p(self.gadget('leave'))
         else:
-            buf += p64(0) * 6
+            buf += self.p(0) * 6
         return buf
 
     def align(self, addr, origin, size):
