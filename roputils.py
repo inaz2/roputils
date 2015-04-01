@@ -90,14 +90,14 @@ class ELF(object):
                 elif value == 'ELF32':
                     self.wordsize = 4
                 else:
-                    raise Exception("unsupported ELF Class: %s" % value)
+                    raise Exception("unsupported ELF Class: %r" % value)
             elif key == 'Type':
                 if value == 'DYN (Shared object file)':
                     self.sec['pie'] = True
                 elif value == 'EXEC (Executable file)':
                     self.sec['pie'] = False
                 else:
-                    raise Exception("unsupported ELF Type: %s" % value)
+                    raise Exception("unsupported ELF Type: %r" % value)
             elif key == 'Machine':
                 if value == 'Advanced Micro Devices X86-64':
                     self.arch = 'x86-64'
@@ -106,7 +106,7 @@ class ELF(object):
                 elif value == 'ARM':
                     self.arch = 'arm'
                 else:
-                    raise Exception("unsupported ELF Machine: %s" % value)
+                    raise Exception("unsupported ELF Machine: %r" % value)
             elif key == 'Entry point address':
                 self._entry_point = int16(value)
         # read Section Headers
@@ -414,7 +414,7 @@ class ROP(ELF):
         elif self.arch == 'arm':
             self.__class__ = type('ROPARM', (ROPARM,), {})
         else:
-            raise Exception("unknown architecture: %s" % self.arch)
+            raise Exception("unknown architecture: %r" % self.arch)
 
     def p(self, x):
         if self.wordsize == 8:
@@ -468,10 +468,10 @@ class ROP(ELF):
         return derived
 
     def list_gadgets(self):
-        raise NotImplementedError("not implemented for this architecture: %s" % self.arch)
+        raise NotImplementedError("not implemented for this architecture: %r" % self.arch)
 
     def scan_gadgets(self, regexp):
-        raise NotImplementedError("not implemented for this architecture: %s" % self.arch)
+        raise NotImplementedError("not implemented for this architecture: %r" % self.arch)
 
 
 class ROPX86(ROP):
@@ -1169,7 +1169,7 @@ class Asm(object):
             cmd_as = ['as', '-mthumb', '-o']
             cmd_objdump = ['objdump', '-w', '-d']
         else:
-            raise Exception('unsupported architecture')
+            raise Exception("unsupported architecture: %r" % arch)
 
         with tempfile.NamedTemporaryFile(delete=False) as f:
             p = Popen(cmd_as + [f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
@@ -1185,15 +1185,15 @@ class Asm(object):
     @classmethod
     def disassemble(cls, blob, arch):
         if arch == 'i386':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel', '-D'] 
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel', '-D']
         elif arch == 'x86-64':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel,x86-64', '-D'] 
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel,x86-64', '-D']
         elif arch == 'arm':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-EB', '-D'] 
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-EB', '-D']
         elif arch == 'thumb':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-M', 'force-thumb', '-EB', '-D'] 
+            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-M', 'force-thumb', '-EB', '-D']
         else:
-            raise Exception('unsupported architecture')
+            raise Exception("unsupported architecture: %r" % arch)
 
         with tempfile.NamedTemporaryFile() as f:
             f.write(blob)
