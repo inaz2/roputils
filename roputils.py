@@ -12,6 +12,7 @@ import tempfile
 from telnetlib import Telnet
 from subprocess import Popen, PIPE
 from contextlib import contextmanager
+from copy import deepcopy
 
 
 def int16(x):
@@ -750,7 +751,10 @@ class ROP(ELF):
         return s
 
     def derive(self, blob, base=0):
-        return ROPBlob(blob, self.wordsize, base)
+        derived = deepcopy(self)
+        derived._load_blobs = [(0, blob, True)]
+        derived.base = base
+        return derived
 
 
 class ROPBlob(ROP):
