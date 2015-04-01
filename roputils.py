@@ -15,7 +15,10 @@ from contextlib import contextmanager
 
 
 def int16(x):
-    return int(x, 16)
+    if isinstance(x, (list, tuple)):
+        return [int(n, 16) for n in x]
+    else:
+        return int(x, 16)
 
 def p32(x):
     if isinstance(x, str):
@@ -101,7 +104,7 @@ class ELF:
             if not m or m.group('Nr') == 'Nr':
                 continue
             name = m.group('Name')
-            address, size = map(int16, m.group('Address', 'Size'))
+            address, size = int16(m.group('Address', 'Size'))
             self._section[name] = (address, size)
         # read Program Headers
         while True:
@@ -116,7 +119,7 @@ class ELF:
             if not m or m.group('Type') == 'Type':
                 continue
             type_, flg = m.group('Type', 'Flg')
-            offset, virtaddr, filesiz = map(int16, m.group('Offset', 'VirtAddr', 'FileSiz'))
+            offset, virtaddr, filesiz = int16(m.group('Offset', 'VirtAddr', 'FileSiz'))
             if type_ == 'GNU_RELRO':
                 self.sec['relro'] = True
             elif type_ == 'GNU_STACK':
@@ -162,7 +165,7 @@ class ELF:
             if not m or m.group('Offset') == 'Offset':
                 continue
             type_, name = m.group('Type', 'Name')
-            offset, info = map(int16, m.group('Offset', 'Info'))
+            offset, info = int16(m.group('Offset', 'Info'))
             if not type_.endswith('JUMP_SLOT'):
                 continue
             self._got[name] = offset
