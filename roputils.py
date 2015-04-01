@@ -41,7 +41,7 @@ def randint(nbytes):
     return random.getrandbits(nbytes * 8)
 
 
-class ELF:
+class ELF(object):
     def __init__(self, fpath, base=0):
         def env_with(d):
             env = os.environ.copy()
@@ -407,6 +407,15 @@ class ELF:
 
 
 class ROP(ELF):
+    def __init__(self, *args, **kwargs):
+        ELF.__init__(self, *args, **kwargs)
+        if self.arch in ('i386', 'x86-64'):
+            self.__class__ = type('ROPX86', (ROPX86,), {})
+        elif self.arch == 'arm':
+            self.__class__ = type('ROPARM', (ROPARM,), {})
+        else:
+            raise Exception("unknown architecture: %s" % self.arch)
+
     def p(self, x):
         if self.wordsize == 8:
             return p64(x)
@@ -433,6 +442,39 @@ class ROP(ELF):
         else:
             raise ValueError()
 
+    def gadget(self, s):
+        return self.search(s, xonly=True)
+
+    def string(self, s):
+        return s + '\x00'
+
+    def junk(self, n=1):
+        return self.fill(self.wordsize * n)
+
+    def fill(self, size, buf=''):
+        chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+        buflen = size - len(buf)
+        assert buflen >= 0, "%d bytes over" % (-buflen,)
+        return ''.join(random.choice(chars) for i in xrange(buflen))
+
+    def align(self, addr, origin, size):
+        padlen = size - ((addr-origin) % size)
+        return (addr+padlen, padlen)
+
+    def derive(self, blob, base=0):
+        derived = deepcopy(self)
+        derived._load_blobs = [(0, blob, True)]
+        derived.base = base
+        return derived
+
+    def list_gadgets(self):
+        raise NotImplementedError("not implemented for this architecture: %s" % self.arch)
+
+    def scan_gadgets(self, regexp):
+        raise NotImplementedError("not implemented for this architecture: %s" % self.arch)
+
+
+class ROPX86(ROP):
     def gadget(self, keyword, reg=None, n=1):
         def regexp_or(*args):
             return re.compile('(?:' + '|'.join(map(re.escape, args)) + ')')
@@ -508,61 +550,7 @@ class ROP(ELF):
             return self.search(regexp_or(chunk1, chunk2), xonly=True)
         else:
             # search directly
-            return self.search(keyword, xonly=True)
-
-    def list_gadgets(self):
-        if self.wordsize == 8:
-            regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
-        else:
-            regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
-
-        print "%8s" % 'pop',
-        for i in range(6):
-            try:
-                self.gadget('pop', n=i+1)
-                print "\033[32m%d\033[m" % (i+1),
-            except ValueError:
-                print "\033[31m%d\033[m" % (i+1),
-        print
-
-        for keyword in ['pop', 'jmp', 'call', 'push', 'pivot']:
-            print "%8s" % keyword,
-            for reg in regs:
-                try:
-                    self.gadget(keyword, reg)
-                    print "\033[32m%s\033[m" % reg,
-                except ValueError:
-                    print "\033[31m%s\033[m" % reg,
-            print
-
-        print "%8s" % 'etc',
-        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall', 'loop']:
-            try:
-                self.gadget(keyword)
-                print "\033[32m%s\033[m" % keyword,
-            except ValueError:
-                print "\033[31m%s\033[m" % keyword,
-        print
-
-    def scan_gadgets(self, regexp):
-        for virtaddr, blob, is_executable in self._load_blobs:
-            if not is_executable:
-                continue
-
-            for m in re.finditer(regexp, blob):
-                disasm_option = 'intel,x86-64' if self.wordsize == 8 else 'intel,i386'
-                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+m.start()), self.fpath], stdout=PIPE)
-                stdout, stderr = p.communicate()
-
-                lines = stdout.splitlines()[7:]
-                if '(bad)' in lines[0]:
-                    continue
-
-                for line in lines:
-                    print line
-                    if 'ret' in line or 'jmp' in line or '(bad)' in line or '...' in line:
-                        print '-' * 80
-                        break
+            return ROP.gadget(self, keyword)
 
     def call(self, addr, *args):
         if isinstance(addr, str):
@@ -642,10 +630,6 @@ class ROP(ELF):
         else:
             buf += self.p(0) * 6
         return buf
-
-    def align(self, addr, origin, size):
-        padlen = size - ((addr-origin) % size)
-        return (addr+padlen, padlen)
 
     def dl_resolve_data(self, base, name):
         if self.wordsize == 8:
@@ -744,18 +728,6 @@ class ROP(ELF):
         buf += self.p(self.gadget('leave'))
         return buf
 
-    def string(self, s):
-        return s + '\x00'
-
-    def junk(self, n=1):
-        return self.fill(self.wordsize * n)
-
-    def fill(self, size, buf=''):
-        chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
-        buflen = size - len(buf)
-        assert buflen >= 0, "%d bytes over" % (-buflen,)
-        return ''.join(random.choice(chars) for i in xrange(buflen))
-
     def retfill(self, size, buf=''):
         buflen = size - len(buf)
         assert buflen >= 0, "%d bytes over" % (-buflen,)
@@ -763,21 +735,66 @@ class ROP(ELF):
         s += self.p(self.gadget('ret')) * (buflen // self.wordsize)
         return s
 
-    def derive(self, blob, base=0):
-        derived = deepcopy(self)
-        derived._load_blobs = [(0, blob, True)]
-        derived.base = base
-        return derived
+    def list_gadgets(self):
+        if self.wordsize == 8:
+            regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
+        else:
+            regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
+
+        print "%8s" % 'pop',
+        for i in range(6):
+            try:
+                self.gadget('pop', n=i+1)
+                print "\033[32m%d\033[m" % (i+1),
+            except ValueError:
+                print "\033[31m%d\033[m" % (i+1),
+        print
+
+        for keyword in ['pop', 'jmp', 'call', 'push', 'pivot']:
+            print "%8s" % keyword,
+            for reg in regs:
+                try:
+                    self.gadget(keyword, reg)
+                    print "\033[32m%s\033[m" % reg,
+                except ValueError:
+                    print "\033[31m%s\033[m" % reg,
+            print
+
+        print "%8s" % 'etc',
+        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall', 'loop']:
+            try:
+                self.gadget(keyword)
+                print "\033[32m%s\033[m" % keyword,
+            except ValueError:
+                print "\033[31m%s\033[m" % keyword,
+        print
+
+    def scan_gadgets(self, regexp):
+        for virtaddr, blob, is_executable in self._load_blobs:
+            if not is_executable:
+                continue
+
+            for m in re.finditer(regexp, blob):
+                disasm_option = 'intel,x86-64' if self.wordsize == 8 else 'intel,i386'
+                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+m.start()), self.fpath], stdout=PIPE)
+                stdout, stderr = p.communicate()
+
+                lines = stdout.splitlines()[7:]
+                if '(bad)' in lines[0]:
+                    continue
+
+                for line in lines:
+                    print line
+                    if 'ret' in line or 'jmp' in line or '(bad)' in line or '...' in line:
+                        print '-' * 80
+                        break
 
 
-class ROPBlob(ROP):
-    def __init__(self, blob, wordsize, base=0):
-        self._load_blobs = [(0, blob, True)]
-        self.wordsize = wordsize
-        self.base = base
+class ROPARM(ROP):
+    pass
 
 
-class Shellcode:
+class Shellcode(object):
     _database = {
         'i386': {
             'noppairs': ['AI', 'BJ', 'CK', 'FN', 'GO'],
@@ -879,7 +896,7 @@ class Shellcode:
             raise Exception('xor key not found')
 
 
-class FormatStr:
+class FormatStr(object):
     def __init__(self, offset=0):
         # i386 only
         self.offset = offset
@@ -923,7 +940,7 @@ class FormatStr:
         return buf
 
 
-class Proc:
+class Proc(object):
     def __init__(self, *args, **kwargs):
         self.timeout = kwargs.get('timeout', 0.1)
         self.display = kwargs.get('display', False)
@@ -1096,7 +1113,7 @@ class Proc:
         return p32(self.read(4, timeout))
 
 
-class Pattern:
+class Pattern(object):
     @classmethod
     def generate(cls):
         for x in xrange(0x41, 0x5b):
@@ -1136,7 +1153,7 @@ class Pattern:
             raise Exception("pattern not found")
 
 
-class Asm:
+class Asm(object):
     @classmethod
     def assemble(cls, s, arch):
         if arch == 'i386':
