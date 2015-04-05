@@ -796,7 +796,66 @@ class ROPX86(ROP):
 
 
 class ROPARM(ROP):
-    pass
+    def pt(self, x):
+        if isinstance(x, str):
+            return (self(x) | 1)
+        else:
+            return self.p(x | 1)
+
+    def gadget(self, keyword, reg=None, n=1):
+        table = {
+            'pop_r7': '\x80\xbd',         # pop {r7, pc}
+            'pivot': '\xbd\x46\x80\xbd',  # mov sp, r7; pop {r7, pc}
+            'svc0': '\xdf\x00',           # svc 0
+        }
+        if keyword in table:
+            return self.search(table[keyword], xonly=True)
+
+        # search directly
+        return ROP.gadget(self, keyword)
+
+    def call_chain(self, *calls, **kwargs):
+        gadget_candidates = [
+            # gcc (Ubuntu/Linaro 4.8.2-19ubuntu1) 4.8.2
+            ('\x38\x46\x41\x46\x4a\x46\x98\x47\xb4\x42\xf6\xd1', '\xbd\xe8\xf8\x83'),
+        ]
+
+        for chunk1, chunk2 in gadget_candidates:
+            try:
+                set_regs = self.gadget(chunk2)
+                call_reg = self.gadget(chunk1 + chunk2)
+                break
+            except ValueError:
+                pass
+        else:
+            raise Exception('gadget not found')
+
+        buf = self.pt(set_regs)
+
+        for args in calls:
+            if len(args) > 4:
+                raise Exception('4th argument and latter should be set in advance')
+
+            addr = args.pop(0)
+            if isinstance(addr, str):
+                addr = self.plt(addr)
+
+            buf += self.p(addr)
+            buf += self.p([0, 0, 0])
+            for arg in args:
+                buf += self.p(arg)
+            buf += self.junk(3-len(args))
+            buf += self.pt(call_reg)
+
+        if 'pivot' in kwargs:
+            buf += self.pt(self.gadget('pivot'))
+            buf += self.p(0) * 3
+            buf += self.p(kwargs['pivot'] - self.wordsize)
+            buf += self.p(0) * 2
+            buf += self.pt(call_reg)
+        else:
+            buf += self.p(0) * 7
+        return buf
 
 
 class Shellcode(object):
