@@ -14,12 +14,12 @@ roputils.py is the single-file module, so your script can use it by creating a s
 
 Currently roputils.py has the below classes:
 
-* ELF: information about ELF object retrieved by readelf
-* ROP: subclass of ELF, with additional methods for creating ROP sequence
+* ELF: ELF parser (by readelf)
+* ROP: ELF with additional methods for creating ROP chains
 * Shellcode: i386/x86-64/ARM shellcode builder
-* FormatStr: create format string for exploitation
-* Proc: gateway interface of subprocess and socket
-* Pattern: create Metasploit pattern and calculate its offset
+* FormatStr: format string for exploitation
+* Proc: non-blocking IO for local process and remote service
+* Pattern: Metasploit pattern generator/calculator
 * Asm: implementation of asm subcommand
 
 roputils.py also can be used as CLI tool, the subcommands are:
@@ -27,7 +27,7 @@ roputils.py also can be used as CLI tool, the subcommands are:
 * checksec: a clone of [checksec.sh](http://www.trapkit.de/tools/checksec.html)
 * create: call Pattern.create()
 * offset: call Pattern.offset()
-* gadget: availability check for tiny gadgets
+* gadget: availability check of tiny gadgets
 * scan: grep the binary and disassemble from there
 * sc: output shellcode as hexstring
 * asm: i386/x86-64/ARM assembler and disassembler
