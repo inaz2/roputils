@@ -9,8 +9,9 @@ import fcntl
 import select
 import random
 import tempfile
-from telnetlib import Telnet
 from subprocess import Popen, PIPE
+from threading import Thread, Event
+from telnetlib import Telnet
 from contextlib import contextmanager
 from copy import deepcopy
 
@@ -956,32 +957,48 @@ class Proc(object):
     def __init__(self, *args, **kwargs):
         self.timeout = kwargs.get('timeout', 0.1)
         self.display = kwargs.get('display', False)
+        self.debug = kwargs.get('debug', False)
 
         if 'host' in kwargs and 'port' in kwargs:
-            self.p = socket.create_connection((kwargs['host'], kwargs['port']))
-            self.p.setblocking(0)
+            self.s = socket.create_connection((kwargs['host'], kwargs['port']))
         else:
-            self.p = Popen(args, stdin=PIPE, stdout=PIPE)
-            fd = self.p.stdout.fileno()
-            fl = fcntl.fcntl(fd, fcntl.F_GETFL)
-            fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
-            if kwargs.get('debug', False):
-                raw_input("\x1b[32mpid %d is running, attach the debugger if needed. Hit enter key to continue...\x1b[0m" % self.p.pid)
+            self.s = self.connect_process(args)
+        self.s.setblocking(0)
+
+    def connect_process(self, cmd):
+        def run_server(s, e, cmd):
+            c, addr = s.accept()
+            s.close()
+            p = Popen(cmd, stdin=c, stdout=c, stderr=c)
+            if self.debug:
+                raw_input("\x1b[32mpid %d is running, attach the debugger if needed. Hit enter key to continue...\x1b[0m" % p.pid)
+            e.set()
+            p.wait()
+            c.close()
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.bind(('', 0))  # INADDR_ANY, INPORT_ANY
+        s.listen(1)
+
+        e = Event()
+        t = Thread(target=run_server, args=(s, e, cmd))
+        t.start()
+        c = socket.create_connection(s.getsockname())
+        e.wait()
+
+        return c
 
     def write(self, s):
-        if isinstance(self.p, Popen):
-            select.select([], [self.p.stdin], [])
-            self.p.stdin.write(s)
-        else:
-            select.select([], [self.p], [])
-            self.p.sendall(s)
+        select.select([], [self.s], [])
+        self.s.sendall(s)
 
         if self.display:
             printable = re.sub(r'[^\s\x20-\x7e]', '.', s)
             sys.stdout.write("\x1b[33m%s\x1b[0m" % printable)  # yellow
             sys.stdout.flush()
 
-    def read(self, size=-1, timeout=None):
+    def read(self, size=-1, timeout=-1):
         if size < 0:
             chunk_size = 8192
             buf = ''
@@ -992,20 +1009,15 @@ class Proc(object):
                     break
             return buf
 
-        if timeout is None:
+        if timeout == -1:
             timeout = self.timeout
-
-        if isinstance(self.p, Popen):
-            stdout, read = self.p.stdout, self.p.stdout.read
-        else:
-            stdout, read = self.p, self.p.recv
 
         buf = ''
         while len(buf) < size:
-            rlist, wlist, xlist = select.select([stdout], [], [], timeout)
+            rlist, wlist, xlist = select.select([self.s], [], [], timeout)
             if not rlist:
                 break
-            chunk = read(size-len(buf))
+            chunk = self.s.recv(size-len(buf))
             if not chunk:
                 break
             buf += chunk
@@ -1018,15 +1030,15 @@ class Proc(object):
         return buf
 
     def read_until(self, s):
-        buf = self.read(len(s), 864000)
+        buf = self.read(len(s), None)
         while not buf.endswith(s):
-            buf += self.read(1, 864000)
+            buf += self.read(1, None)
         return buf
 
     def expect(self, regexp):
         buf = ''
         while not re.search(regexp, buf):
-            buf += self.read(1, 864000)
+            buf += self.read(1, None)
         return buf
 
     def readline(self):
@@ -1036,44 +1048,29 @@ class Proc(object):
         return self.write(s+'\n')
 
     def shutdown(self, writeonly=False):
-        if isinstance(self.p, Popen):
-            self.p.stdin.close()
-            if not writeonly:
-                self.p.stdout.close()
+        if writeonly:
+            self.s.shutdown(socket.SHUT_WR)
         else:
-            if writeonly:
-                self.p.shutdown(socket.SHUT_WR)
-            else:
-                self.p.shutdown(socket.SHUT_RDWR)
+            self.s.shutdown(socket.SHUT_RDWR)
+            self.s.close()
 
     def close(self):
-        if isinstance(self.p, Popen):
-            self.p.terminate()
-        else:
-            self.p.close()
+        self.s.close()
 
-    def wait(self, redirect_fd=None):
+    def wait(self, shell_fd=None):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
 
         buf = self.read()
         sys.stdout.write(buf)
 
-        if isinstance(self.p, Popen):
-            if redirect_fd is not None:
-                self.write(check_cmd + '\n')
-                sys.stdout.write(self.read())
-                self.write('exec /bin/sh <&2 >&2\n')
-            self.p.wait()
-            return self.p.returncode
-        else:
-            if redirect_fd is not None:
-                self.write(check_cmd + '\n')
-                sys.stdout.write(self.read())
-                self.write("exec /bin/sh <&%(fd)d >&%(fd)d 2>&%(fd)d\n" % {'fd': redirect_fd})
-            t = Telnet()
-            t.sock = self.p
-            t.interact()
-            t.close()
+        if shell_fd is not None:
+            self.write(check_cmd + '\n')
+            sys.stdout.write(self.read())
+            self.write("exec /bin/sh <&%(fd)d >&%(fd)d 2>&%(fd)d\n" % {'fd': shell_fd})
+        t = Telnet()
+        t.sock = self.s
+        t.interact()
+        self.shutdown()
 
     @contextmanager
     def listen(self, port=4444, echotest=False):
@@ -1081,15 +1078,10 @@ class Proc(object):
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(('', port))  # the empty string represents INADDR_ANY
+        s.bind(('', 0))  # INADDR_ANY, INPORT_ANY
         s.listen(1)
 
-        if isinstance(self.p, Popen):
-            addrinfo = socket.getaddrinfo('localhost', port, socket.AF_INET, socket.SOCK_STREAM)
-            host = addrinfo[0][4][0]
-        else:
-            host = self.p.getsockname()[0]
-        yield (host, port)
+        yield s.getsockname()
 
         c, addr = s.accept()
         s.close()
@@ -1100,15 +1092,12 @@ class Proc(object):
         t = Telnet()
         t.sock = c
         t.interact()
-        t.close()
-        self.close()
+        c.shutdown(socket.SHUT_RDWR)
+        c.close()
+        self.shutdown()
 
     def pipe_output(self, *args):
-        if isinstance(self.p, Popen):
-            p_stdout = self.p.stdout
-        else:
-            p_stdout = self.p.makefile()
-        p = Popen(args, stdin=p_stdout, stdout=PIPE)
+        p = Popen(args, stdin=self.s, stdout=PIPE)
         stdout, stderr = p.communicate()
         return stdout
 
