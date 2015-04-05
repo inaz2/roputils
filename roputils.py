@@ -242,6 +242,26 @@ class ELF(object):
     def str(self, name):
         return self.search(name + '\x00')
 
+    def search(self, s, xonly=False):
+        if isinstance(s, int):
+            s = self.p(s)
+
+        for virtaddr, blob, is_executable in self._load_blobs:
+            if xonly and not is_executable:
+                continue
+            if isinstance(s, re._pattern_type):
+                m = re.search(s, blob)
+                if m:
+                    return self.offset(virtaddr + m.start())
+            else:
+                try:
+                    i = blob.index(s)
+                    return self.offset(virtaddr + i)
+                except ValueError:
+                    pass
+        else:
+            raise ValueError()
+
     def checksec(self):
         result = ''
         if self.sec['relro']:
@@ -422,26 +442,6 @@ class ROP(ELF):
             return p64(x)
         else:
             return p32(x)
-
-    def search(self, s, xonly=False):
-        if isinstance(s, int):
-            s = self.p(s)
-
-        for virtaddr, blob, is_executable in self._load_blobs:
-            if xonly and not is_executable:
-                continue
-            if isinstance(s, re._pattern_type):
-                m = re.search(s, blob)
-                if m:
-                    return self.offset(virtaddr + m.start())
-            else:
-                try:
-                    i = blob.index(s)
-                    return self.offset(virtaddr + i)
-                except ValueError:
-                    pass
-        else:
-            raise ValueError()
 
     def gadget(self, s):
         return self.search(s, xonly=True)
