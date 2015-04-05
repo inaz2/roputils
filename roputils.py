@@ -590,7 +590,7 @@ class ROPX86(ROP):
         for chunk1, chunk2, _args_reversed in gadget_candidates:
             try:
                 set_regs = self.gadget(chunk2)
-                call_r12 = self.gadget(chunk1 + chunk2)
+                call_ptr = self.gadget(chunk1 + chunk2)
                 args_reversed = _args_reversed
                 break
             except ValueError:
@@ -620,7 +620,7 @@ class ROPX86(ROP):
                 buf += self.junk(3-len(args))
                 for arg in reversed(args):
                     buf += self.p(arg)
-            buf += self.p(call_r12)
+            buf += self.p(call_ptr)
 
         buf += self.junk()
         if 'pivot' in kwargs:
