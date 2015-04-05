@@ -168,6 +168,7 @@ class ELF(object):
             elif value.endswith(' (bytes)'):
                 self._dynamic[type_] = int(value.split()[0])
         # read Relocation section (.rel.plt/.rela.plt)
+        in_unwind_table_index = False
         while True:
             line = p.stdout.readline()
             if line.startswith('Symbol table'):
@@ -176,6 +177,9 @@ class ELF(object):
             elif line == 'No version information found in this file.\n':
                 has_symbol_table = False
                 break
+            elif in_unwind_table_index or line.startswith('Unwind table index'):
+                in_unwind_table_index = True
+                continue
             m = re.search(regexp['reloc'], line)
             if not m or m.group('Offset') == 'Offset':
                 continue
