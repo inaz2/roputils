@@ -871,6 +871,16 @@ class ROPARM(ROP):
             addr = self.gadget('pivot_fp')
             return self.p([addr+4, rsp-self.wordsize, addr])
 
+    def list_gadgets(self):
+        print "%8s" % 'etc',
+        for keyword in ['pop_r7', 'pop_fp', 'pivot_r7', 'pivot_fp', 'svc0']:
+            try:
+                self.gadget(keyword)
+                print "\033[32m%s\033[m" % keyword,
+            except ValueError:
+                print "\033[31m%s\033[m" % keyword,
+        print
+
 
 class Shellcode(object):
     _database = {
