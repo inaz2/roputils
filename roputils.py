@@ -252,22 +252,23 @@ class ELF(object):
         for virtaddr, blob, is_executable in self._load_blobs:
             if xonly and not is_executable:
                 continue
+
             if isinstance(s, re._pattern_type):
-                m = re.search(s, blob)
-                if m:
+                for m in re.finditer(s, blob):
                     addr = self.offset(virtaddr + m.start())
                     if self.arch == 'arm' and xonly and addr % 2 != 0:
                         continue
                     return addr
             else:
-                try:
-                    i = blob.index(s)
+                i = -1
+                while True:
+                    i = blob.find(s, i+1)
+                    if i == -1:
+                        break
                     addr = self.offset(virtaddr + i)
                     if self.arch == 'arm' and xonly and addr % 2 != 0:
                         continue
                     return addr
-                except ValueError:
-                    pass
         else:
             raise ValueError()
 
