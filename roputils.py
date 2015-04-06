@@ -807,8 +807,6 @@ class ROPARM(ROP):
 
     def gadget(self, keyword, reg=None, n=1):
         table = {
-            'pop_r7': '\x80\xbd',                            # pop {r7, pc}
-            'pop_fp': '\x00\x88\xbd\xe8',                    # pop {fp, pc}
             'pivot_r7': '\xbd\x46\x80\xbd',                  # mov sp, r7; pop {r7, pc}
             'pivot_fp': '\x0b\xd0\xa0\xe1\x00\x88\xbd\xe8',  # mov sp, fp; pop {fp, pc}
             'pop_r0_3fp': '\xbd\xe8\x0f\x88',                # ldmia.w sp!, {r0, r1, r2, r3, fp, pc}
@@ -894,8 +892,17 @@ class ROPARM(ROP):
             return self.p([addr+4, rsp-self.wordsize, addr])
 
     def list_gadgets(self):
-        print "%8s" % 'etc',
-        for keyword in ['pop_r7', 'pop_fp', 'pivot_r7', 'pivot_fp', 'pop_r0_3fp', 'pop_r4_7', 'svc0']:
+        print "%8s" % 'pivot',
+        for keyword in ['pivot_r7', 'pivot_fp']:
+            try:
+                self.gadget(keyword)
+                print "\033[32m%s\033[m" % keyword,
+            except ValueError:
+                print "\033[31m%s\033[m" % keyword,
+        print
+
+        print "%8s" % 'syscall',
+        for keyword in ['pop_r0_3fp', 'pop_r4_7', 'svc0']:
             try:
                 self.gadget(keyword)
                 print "\033[32m%s\033[m" % keyword,
