@@ -289,7 +289,7 @@ class ELF(object):
             print 'FORTIFY_SOURCE: \033[31mNo\033[m'
 
     def objdump(self):
-        p = Popen(['objdump', '-M', 'intel', '-d', self.fpath], stdout=PIPE)
+        p = Popen(Asm.cmd[self.arch]['objdump'] + [self.fpath], stdout=PIPE)
         stdout, stderr = p.communicate()
 
         p = Popen(['strings', '-tx', fpath], stdout=PIPE)
@@ -427,7 +427,7 @@ class ELF(object):
             else:
                 print line
 
-            if 'ret' in line:
+            if re.search(r'\t(?:ret|jmp)', line):
                 print "\x1b[30;1m; %s\x1b[0m" % ('-' * 78)
 
 
@@ -472,10 +472,30 @@ class ROP(ELF):
         derived.base = base
         return derived
 
-    def list_gadgets(self):
-        raise NotImplementedError("not implemented for this architecture: %r" % self.arch)
-
     def scan_gadgets(self, regexp):
+        for virtaddr, blob, is_executable in self._load_blobs:
+            if not is_executable:
+                continue
+
+            for m in re.finditer(regexp, blob):
+                if self.arch == 'arm':
+                    arch = 'thumb'
+                else:
+                    arch = self.arch
+                p = Popen(Asm.cmd[arch]['objdump_binary'] + ["--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+m.start()), self.fpath], stdout=PIPE)
+                stdout, stderr = p.communicate()
+
+                lines = stdout.splitlines()[7:]
+                if '\t(bad)' in lines[0]:
+                    continue
+
+                for line in lines:
+                    print line
+                    if re.search(r'\t(?:ret|jmp|\(bad\)|; <UNDEFINED> instruction|\.\.\.)', line):
+                        print '-' * 80
+                        break
+
+    def list_gadgets(self):
         raise NotImplementedError("not implemented for this architecture: %r" % self.arch)
 
 
@@ -773,26 +793,6 @@ class ROPX86(ROP):
             except ValueError:
                 print "\033[31m%s\033[m" % keyword,
         print
-
-    def scan_gadgets(self, regexp):
-        for virtaddr, blob, is_executable in self._load_blobs:
-            if not is_executable:
-                continue
-
-            for m in re.finditer(regexp, blob):
-                disasm_option = 'intel,x86-64' if self.wordsize == 8 else 'intel,i386'
-                p = Popen(['objdump', '-D', '-b', 'binary', '-m', 'i386', '-M', disasm_option, "--adjust-vma=%d" % virtaddr, "--start-address=%d" % (virtaddr+m.start()), self.fpath], stdout=PIPE)
-                stdout, stderr = p.communicate()
-
-                lines = stdout.splitlines()[7:]
-                if '(bad)' in lines[0]:
-                    continue
-
-                for line in lines:
-                    print line
-                    if 'ret' in line or 'jmp' in line or '(bad)' in line or '...' in line:
-                        print '-' * 80
-                        break
 
 
 class ROPARM(ROP):
@@ -1232,29 +1232,42 @@ class Pattern(object):
 
 
 class Asm(object):
+    cmd = {
+        'i386': {
+            'as': ['as', '--32', '--msyntax=intel', '--mnaked-reg', '-o'],
+            'objdump': ['objdump', '-M', 'intel', '-d'],
+            'objdump_binary': ['objdump', '-b', 'binary', '-m', 'i386', '-M', 'intel,i386', '-D'],
+        },
+        'x86-64': {
+            'as': ['as', '--64', '--msyntax=intel', '--mnaked-reg', '-o'],
+            'objdump': ['objdump', '-M', 'intel', '-d'],
+            'objdump_binary': ['objdump', '-b', 'binary', '-m', 'i386', '-M', 'intel,x86-64', '-D'],
+        },
+        'arm': {
+            'as': ['as', '-o'],
+            'objdump': ['objdump', '-d'],
+            'objdump_binary': ['objdump', '-b', 'binary', '-m', 'arm', '-D'],
+        },
+        'thumb': {
+            'as': ['as', '-mthumb', '-o'],
+            'objdump': ['objdump', '-M', 'force-thumb', '-d'],
+            'objdump_binary': ['objdump', '-b', 'binary', '-m', 'arm', '-M', 'force-thumb', '-D'],
+        },
+    }
+
     @classmethod
     def assemble(cls, s, arch):
-        if arch == 'i386':
-            cmd_as = ['as', '--32', '--msyntax=intel', '--mnaked-reg', '-o']
-            cmd_objdump = ['objdump', '-w', '-M', 'intel', '-d']
-        elif arch == 'x86-64':
-            cmd_as = ['as', '--64', '--msyntax=intel', '--mnaked-reg', '-o']
-            cmd_objdump = ['objdump', '-w', '-M', 'intel', '-d']
-        elif arch == 'arm':
-            cmd_as = ['as', '-o']
-            cmd_objdump = ['objdump', '-w', '-d']
-        elif arch == 'thumb':
-            cmd_as = ['as', '-mthumb', '-o']
-            cmd_objdump = ['objdump', '-w', '-d']
+        if arch in cls.cmd:
+            cmd = cls.cmd[arch]
         else:
             raise Exception("unsupported architecture: %r" % arch)
 
         with tempfile.NamedTemporaryFile(delete=False) as f:
-            p = Popen(cmd_as + [f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+            p = Popen(cmd['as'] + [f.name], stdin=PIPE, stdout=PIPE, stderr=PIPE)
             stdout, stderr = p.communicate(s+'\n')
             if stderr:
                 return stderr
-            p = Popen(cmd_objdump + [f.name], stdout=PIPE)
+            p = Popen(cmd['objdump'] + ['-w', f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
             result = ''.join(stdout.splitlines(True)[7:])
             os.remove(f.name)
@@ -1262,21 +1275,18 @@ class Asm(object):
 
     @classmethod
     def disassemble(cls, blob, arch):
-        if arch == 'i386':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel', '-D']
-        elif arch == 'x86-64':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'i386', '-M', 'intel,x86-64', '-D']
-        elif arch == 'arm':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-EB', '-D']
-        elif arch == 'thumb':
-            cmd_objdump = ['objdump', '-w', '-b', 'binary', '-m', 'arm', '-M', 'force-thumb', '-EB', '-D']
+        if arch in cls.cmd:
+            cmd = cls.cmd[arch]
         else:
             raise Exception("unsupported architecture: %r" % arch)
 
         with tempfile.NamedTemporaryFile() as f:
             f.write(blob)
             f.flush()
-            p = Popen(cmd_objdump + [f.name], stdout=PIPE)
+            if arch in ('arm', 'thumb'):
+                p = Popen(cmd['objdump_binary'] + ['-EB', '-w', f.name], stdout=PIPE)
+            else:
+                p = Popen(cmd['objdump_binary'] + ['-w', f.name], stdout=PIPE)
             stdout, stderr = p.communicate()
             result = ''.join(stdout.splitlines(True)[7:])
             return result
