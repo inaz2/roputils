@@ -648,12 +648,12 @@ class ROPX86(ROP):
 
         buf += self.junk()
         if 'pivot' in kwargs:
-            buf += self.p(0)
+            buf += self.junk()
             buf += self.p(kwargs['pivot'] - self.wordsize)
-            buf += self.p(0) * 4
+            buf += self.junk(4)
             buf += self.p(self.gadget('leave'))
         else:
-            buf += self.p(0) * 6
+            buf += self.junk(6)
         return buf
 
     def dl_resolve_data(self, base, name):
@@ -808,7 +808,9 @@ class ROPARM(ROP):
             'pop_fp': '\x00\x88\xbd\xe8',                    # pop {fp, pc}
             'pivot_r7': '\xbd\x46\x80\xbd',                  # mov sp, r7; pop {r7, pc}
             'pivot_fp': '\x0b\xd0\xa0\xe1\x00\x88\xbd\xe8',  # mov sp, fp; pop {fp, pc}
-            'svc0': '\xdf\x00',                              # svc 0
+            'pop_r0_3fp': '\xbd\xe8\x0f\x88',                # ldmia.w sp!, {r0, r1, r2, r3, fp, pc}
+            'pop_r4_7': '\xf0\xbd',                          # pop {r4, r5, r6, r7, pc}
+            'svc0': '\x00\xdf',                              # svc 0
         }
         if keyword in table:
             return self.search(table[keyword], xonly=True)
@@ -852,15 +854,32 @@ class ROPARM(ROP):
         if 'pivot' in kwargs:
             try:
                 buf += self.pt(self.gadget('pivot_r7'))
-                buf += self.p(0) * 3
+                buf += self.p([0, 0, 0])
                 buf += self.p(kwargs['pivot'] - self.wordsize)
-                buf += self.p(0) * 2
+                buf += self.junk(2)
                 buf += self.pt(call_reg)
             except ValueError:
-                buf += self.p(0) * 7
+                buf += self.junk(7)
                 buf += self.pivot(kwargs['pivot'])
         else:
-            buf += self.p(0) * 7
+            buf += self.junk(7)
+        return buf
+
+    def syscall(self, number, *args):
+        args0_3, args4_6 = args[:4], args[4:7]
+
+        buf = self.pt(self.gadget('pop_r0_3fp'))
+        for arg in args0_3:
+            buf += self.p(arg)
+        buf += self.junk(4-len(args0_3))
+        buf += self.junk()
+        buf += self.pt(self.gadget('pop_r4_7'))
+        for arg in args4_6:
+            buf += self.p(arg)
+        buf += self.junk(3-len(args4_6))
+        buf += self.p(number)
+        buf += self.pt(self.gadget('svc0'))
+
         return buf
 
     def pivot(self, rsp):
@@ -873,7 +892,7 @@ class ROPARM(ROP):
 
     def list_gadgets(self):
         print "%8s" % 'etc',
-        for keyword in ['pop_r7', 'pop_fp', 'pivot_r7', 'pivot_fp', 'svc0']:
+        for keyword in ['pop_r7', 'pop_fp', 'pivot_r7', 'pivot_fp', 'pop_r0_3fp', 'pop_r4_7', 'svc0']:
             try:
                 self.gadget(keyword)
                 print "\033[32m%s\033[m" % keyword,
