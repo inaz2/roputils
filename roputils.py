@@ -13,7 +13,6 @@ from subprocess import Popen, PIPE
 from threading import Thread, Event
 from telnetlib import Telnet
 from contextlib import contextmanager
-from copy import deepcopy
 
 
 def int16(x):
@@ -256,11 +255,17 @@ class ELF(object):
             if isinstance(s, re._pattern_type):
                 m = re.search(s, blob)
                 if m:
-                    return self.offset(virtaddr + m.start())
+                    addr = self.offset(virtaddr + m.start())
+                    if self.arch == 'arm' and xonly and addr % 2 != 0:
+                        continue
+                    return addr
             else:
                 try:
                     i = blob.index(s)
-                    return self.offset(virtaddr + i)
+                    addr = self.offset(virtaddr + i)
+                    if self.arch == 'arm' and xonly and addr % 2 != 0:
+                        continue
+                    return addr
                 except ValueError:
                     pass
         else:
@@ -466,11 +471,8 @@ class ROP(ELF):
         padlen = size - ((addr-origin) % size)
         return (addr+padlen, padlen)
 
-    def derive(self, blob, base=0):
-        derived = deepcopy(self)
-        derived._load_blobs = [(0, blob, True)]
-        derived.base = base
-        return derived
+    def load(self, blob, base=0):
+        self._load_blobs += [(base, blob, True)]
 
     def scan_gadgets(self, regexp):
         for virtaddr, blob, is_executable in self._load_blobs:
