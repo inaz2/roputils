@@ -30,7 +30,7 @@ roputils.py also can be used as CLI tool, the subcommands are:
 * gadget: availability check of tiny gadgets
 * scan: grep the binary and disassemble from there
 * sc: output shellcode as hexstring
-* asm: i386/x86-64/ARM assembler and disassembler
+* asm: i386/x86-64/ARM/Thumb2 assembler and disassembler
 * objdump: disassemble with IDA-like annotations
 
 To list up the methods of each class, hit the below command in the same directory as roputils.py:
