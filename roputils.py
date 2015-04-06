@@ -804,9 +804,11 @@ class ROPARM(ROP):
 
     def gadget(self, keyword, reg=None, n=1):
         table = {
-            'pop_r7': '\x80\xbd',         # pop {r7, pc}
-            'pivot': '\xbd\x46\x80\xbd',  # mov sp, r7; pop {r7, pc}
-            'svc0': '\xdf\x00',           # svc 0
+            'pop_r7': '\x80\xbd',                            # pop {r7, pc}
+            'pop_fp': '\x00\x88\xbd\xe8',                    # pop {fp, pc}
+            'pivot_r7': '\xbd\x46\x80\xbd',                  # mov sp, r7; pop {r7, pc}
+            'pivot_fp': '\x0b\xd0\xa0\xe1\x00\x88\xbd\xe8',  # mov sp, fp; pop {fp, pc}
+            'svc0': '\xdf\x00',                              # svc 0
         }
         if keyword in table:
             return self.search(table[keyword], xonly=True)
@@ -848,14 +850,26 @@ class ROPARM(ROP):
             buf += self.pt(call_reg)
 
         if 'pivot' in kwargs:
-            buf += self.pt(self.gadget('pivot'))
-            buf += self.p(0) * 3
-            buf += self.p(kwargs['pivot'] - self.wordsize)
-            buf += self.p(0) * 2
-            buf += self.pt(call_reg)
+            try:
+                buf += self.pt(self.gadget('pivot_r7'))
+                buf += self.p(0) * 3
+                buf += self.p(kwargs['pivot'] - self.wordsize)
+                buf += self.p(0) * 2
+                buf += self.pt(call_reg)
+            except ValueError:
+                buf += self.p(0) * 7
+                buf += self.pivot(kwargs['pivot'])
         else:
             buf += self.p(0) * 7
         return buf
+
+    def pivot(self, rsp):
+        try:
+            addr = self.gadget('pivot_r7')
+            return self.p([addr+2, rsp-self.wordsize, addr])
+        except ValueError:
+            addr = self.gadget('pivot_fp')
+            return self.p([addr+4, rsp-self.wordsize, addr])
 
 
 class Shellcode(object):
