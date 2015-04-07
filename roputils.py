@@ -854,11 +854,11 @@ class ROPARM(ROP):
 
         if 'pivot' in kwargs:
             try:
-                buf += self.pt(self.gadget('pivot_r7'))
-                buf += self.p([0, 0, 0])
+                pivot_r7 = self.gadget('pivot_r7')
+                buf += self.junk(4)
                 buf += self.p(kwargs['pivot'] - self.wordsize)
                 buf += self.junk(2)
-                buf += self.pt(call_reg)
+                buf += self.pt(pivot_r7)
             except ValueError:
                 buf += self.junk(7)
                 buf += self.pivot(kwargs['pivot'])
