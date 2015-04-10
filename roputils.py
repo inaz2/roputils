@@ -642,21 +642,21 @@ class ROPX86(ROP):
             if not args_reversed:
                 for arg in args:
                     buf += self.p(arg)
-                buf += self.junk(3-len(args))
+                buf += self.p(0) * (3-len(args))
             else:
-                buf += self.junk(3-len(args))
+                buf += self.p(0) * (3-len(args))
                 for arg in reversed(args):
                     buf += self.p(arg)
             buf += self.p(call_ptr)
 
         buf += self.junk()
         if 'pivot' in kwargs:
-            buf += self.junk()
+            buf += self.p(0)
             buf += self.p(kwargs['pivot'] - self.wordsize)
-            buf += self.junk(4)
+            buf += self.p(0) * 4
             buf += self.p(self.gadget('leave'))
         else:
-            buf += self.junk(6)
+            buf += self.p(0) * 6
         return buf
 
     def dl_resolve_data(self, base, name):
@@ -849,21 +849,21 @@ class ROPARM(ROP):
             buf += self.p([0, 0, 0])
             for arg in args:
                 buf += self.p(arg)
-            buf += self.junk(3-len(args))
+            buf += self.p(0) * (3-len(args))
             buf += self.pt(call_reg)
 
         if 'pivot' in kwargs:
             try:
                 pivot_r7 = self.gadget('pivot_r7')
-                buf += self.junk(4)
+                buf += self.p(0) * 4
                 buf += self.p(kwargs['pivot'] - self.wordsize)
-                buf += self.junk(2)
+                buf += self.p(0) * 2
                 buf += self.pt(pivot_r7)
             except ValueError:
-                buf += self.junk(7)
+                buf += self.p(0) * 7
                 buf += self.pivot(kwargs['pivot'])
         else:
-            buf += self.junk(7)
+            buf += self.p(0) * 7
         return buf
 
     def syscall(self, number, *args):
@@ -872,12 +872,12 @@ class ROPARM(ROP):
         buf = self.pt(self.gadget('pop_r0_3fp'))
         for arg in args0_3:
             buf += self.p(arg)
-        buf += self.junk(4-len(args0_3))
-        buf += self.junk()
+        buf += self.p(0) * (4-len(args0_3))
+        buf += self.p(0)
         buf += self.pt(self.gadget('pop_r4_7'))
         for arg in args4_6:
             buf += self.p(arg)
-        buf += self.junk(3-len(args4_6))
+        buf += self.p(0) * (3-len(args4_6))
         buf += self.p(number)
         buf += self.pt(self.gadget('svc0'))
 
