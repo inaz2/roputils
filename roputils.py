@@ -1125,7 +1125,7 @@ class Proc(object):
                     break
             return buf
 
-        if timeout == -1:
+        if timeout < 0:
             timeout = self.timeout
 
         buf = ''
@@ -1168,12 +1168,11 @@ class Proc(object):
             self.s.shutdown(socket.SHUT_WR)
         else:
             self.s.shutdown(socket.SHUT_RDWR)
-            self.s.close()
 
     def close(self):
         self.s.close()
 
-    def wait(self, shell_fd=None):
+    def interact(self, shell_fd=None):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
 
         buf = self.read()
@@ -1183,13 +1182,15 @@ class Proc(object):
             self.write(check_cmd + '\n')
             sys.stdout.write(self.read())
             self.write("exec /bin/sh <&%(fd)d >&%(fd)d 2>&%(fd)d\n" % {'fd': shell_fd})
+
         t = Telnet()
         t.sock = self.s
         t.interact()
         self.shutdown()
+        self.close()
 
     @contextmanager
-    def listen(self, port=4444, echotest=False):
+    def listen(self, port=4444, is_shell=False):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
@@ -1201,16 +1202,14 @@ class Proc(object):
 
         c, addr = s.accept()
         s.close()
-        if echotest:
+        if is_shell:
             c.sendall(check_cmd + '\n')
             sys.stdout.write(c.recv(8192))
 
         t = Telnet()
         t.sock = c
         t.interact()
-        c.shutdown(socket.SHUT_RDWR)
         c.close()
-        self.shutdown()
 
     def pipe_output(self, *args):
         p = Popen(args, stdin=self.s, stdout=PIPE)
@@ -1223,11 +1222,11 @@ class Proc(object):
     def write_p32(self, s):
         return self.write(p32(s))
 
-    def read_p64(self, timeout=None):
-        return p64(self.read(8, timeout))
+    def read_p64(self):
+        return p64(self.read(8, None))
 
-    def read_p32(self, timeout=None):
-        return p32(self.read(4, timeout))
+    def read_p32(self):
+        return p32(self.read(4, None))
 
 
 class Pattern(object):

