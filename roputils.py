@@ -513,8 +513,8 @@ class ROPX86(ROP):
             'leave': '\xc9\xc3',
             'ret': '\xc3',
             'int3': '\xcc',
-            'int0x80': '\xcd\x80',
-            'call_gs': '\x65\xff\x15\x10\x00\x00\x00',
+            'int80': '\xcd\x80',
+            'call_gs10': '\x65\xff\x15\x10\x00\x00\x00',
             'syscall': '\x0f\x05',
         }
         if keyword in table:
@@ -752,7 +752,7 @@ class ROPX86(ROP):
                 # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
                 args = list(args) + [0] * (6-len(args))
                 buf = self.p([self.gadget('popad'), args[4], args[3], args[5], 0, args[0], args[2], args[1], number])
-            buf += self.p(self.gadget('int0x80'))
+            buf += self.p(self.gadget('int80'))
         return buf
 
     def pivot(self, rsp):
@@ -793,7 +793,7 @@ class ROPX86(ROP):
             print
 
         print "%8s" % 'etc',
-        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int0x80', 'call_gs', 'syscall', 'loop']:
+        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int80', 'call_gs10', 'syscall', 'loop']:
             try:
                 self.gadget(keyword)
                 print "\033[32m%s\033[m" % keyword,
