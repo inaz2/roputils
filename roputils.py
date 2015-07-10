@@ -553,6 +553,10 @@ class ROPX86(ROP):
             prefix = '\x41' if need_prefix else ''
             chunk = prefix + '\xff' + chr(0xe0+r)
             return self.search(chunk, xonly=True)
+        elif keyword == 'jmp_ptr':
+            prefix = '\x41' if need_prefix else ''
+            chunk = prefix + '\xff' + chr(0x20+r)
+            return self.search(chunk, xonly=True)
         elif keyword == 'push':
             prefix = '\x41' if need_prefix else ''
             chunk1 = prefix + chr(0x50+r) + '\xc3'
@@ -778,7 +782,7 @@ class ROPX86(ROP):
                 print "\033[31m%d\033[m" % (i+1),
         print
 
-        for keyword in ['pop', 'jmp', 'call', 'push', 'pivot']:
+        for keyword in ['pop', 'jmp', 'jmp_ptr', 'call', 'push', 'pivot']:
             print "%8s" % keyword,
             for reg in regs:
                 try:
