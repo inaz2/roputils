@@ -15,8 +15,8 @@ main:
         int 0x80                # open
         xchg ecx, eax
         lea ebx, [edx+1]
-        lea esi, [edx+1]
-        shl esi, 16
+        xor esi, esi
+        not si
         lea eax, [edx+68]
         not al
         int 0x80                # sendfile

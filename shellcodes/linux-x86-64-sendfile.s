@@ -17,9 +17,8 @@ main:
         xchg rdx, rax
         push 1
         pop rdi
-        push 1
-        pop r10
-        shl r10, 16
+        xor r10, r10
+        not r10d
         push 40
         pop rax
         syscall                 # sendfile
