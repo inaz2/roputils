@@ -1350,53 +1350,64 @@ class Asm(object):
             return result
 
 
-if __name__ == '__main__':
-    fmt_usage = "Usage: python %s [checksec|create|offset|gadget|scan|sc|asm|objdump] ..."
+def exit_with_usage(format_str):
+    print >>sys.stderr, format_str % sys.argv[0]
+    sys.exit(1)
 
+if __name__ == '__main__':
     if len(sys.argv) < 2:
-        print >>sys.stderr, fmt_usage % sys.argv[0]
-        sys.exit(1)
+        exit_with_usage("Usage: python %s [checksec|create|offset|gadget|scan|sc|asm|objdump] ...")
     cmd = sys.argv[1]
 
     if cmd == 'checksec':
-        fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
+        if len(sys.argv) < 3:
+            exit_with_usage("check security features\n\nUsage: python %s checksec FILE")
+        fpath = sys.argv[2]
         ELF(fpath).checksec()
     elif cmd == 'create':
-        size = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+        if len(sys.argv) < 3:
+            exit_with_usage("create Metasploit pattern\n\nUsage: python %s create SIZE")
+        size = int(sys.argv[2])
         print Pattern.create(size)
     elif cmd == 'offset':
         if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: python %s offset [ADDRESS|STRING]" % sys.argv[0]
-            sys.exit(1)
+            exit_with_usage("calculate offset in Metasploit pattern\n\nUsage: python %s offset <ADDRESS|STRING>")
         print Pattern.offset(sys.argv[2])
     elif cmd == 'gadget':
-        fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
+        if len(sys.argv) < 3:
+            exit_with_usage("check availability of tiny gadgets\n\nUsage: python %s gadget FILE")
+        fpath = sys.argv[2]
         ROP(fpath).list_gadgets()
     elif cmd == 'scan':
-        if len(sys.argv) < 3:
-            print >>sys.stderr, "Usage: python %s scan REGEXP [FILE]" % sys.argv[0]
-            sys.exit(1)
+        if len(sys.argv) < 4:
+            exit_with_usage("grep the binary and disassemble from each index\n\nUsage: python %s scan REGEXP FILE")
         regexp = sys.argv[2]
-        fpath = sys.argv[3] if len(sys.argv) > 3 else 'a.out'
+        fpath = sys.argv[3]
         ROP(fpath).scan_gadgets(regexp)
     elif cmd == 'sc':
-        arch, kind = sys.argv[2].split('/', 1)
+        if len(sys.argv) < 3:
+            exit_with_usage("output shellcode as hexstring\n\nUsage: python %s sc ARCH/NAME [ARG...]")
+        arch, name = sys.argv[2].split('/', 1)
         args = [int(x) if x.isdigit() else x for x in sys.argv[3:]]
-        s = getattr(Shellcode(arch), kind).__call__(*args)
+        s = getattr(Shellcode(arch), name).__call__(*args)
         print ''.join("\\x%02x" % ord(x) for x in s)
     elif cmd == 'asm':
-        if len(sys.argv) > 2 and sys.argv[2] == '-d':
-            arch = sys.argv[3] if len(sys.argv) > 3 else 'i386'
+        if len(sys.argv) < 3:
+            exit_with_usage("assemble/disassemble input (i386/x86-64/arm/thumb2)\n\nUsage: python %s asm [-d] ARCH")
+        if sys.argv[2] == '-d' and len(sys.argv) > 3:
+            arch = sys.argv[3]
             data = sys.stdin.read()
             if re.search(r'^[\s\dA-Fa-f]*$', data):
                 data = ''.join(data.split()).decode('hex')
             print Asm.disassemble(data, arch).rstrip()
         else:
-            arch = sys.argv[2] if len(sys.argv) > 2 else 'i386'
+            arch = sys.argv[2]
             data = sys.stdin.read()
             print Asm.assemble(data, arch).rstrip()
     elif cmd == 'objdump':
-        fpath = sys.argv[2] if len(sys.argv) > 2 else 'a.out'
+        if len(sys.argv) < 3:
+            exit_with_usage("disassemble with IDA-like annotations\n\nUsage: python %s objdump FILE")
+        fpath = sys.argv[2]
         ELF(fpath).objdump()
     else:
         print >>sys.stderr, fmt_usage % sys.argv[0]

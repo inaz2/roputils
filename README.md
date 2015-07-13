@@ -15,22 +15,22 @@ roputils.py is the single-file module, so your script can use it by creating a s
 Currently roputils.py has the below classes:
 
 * ELF: ELF parser (by readelf)
-* ROP: ELF with additional methods for creating ROP chains
-* Shellcode: i386/x86-64/ARM shellcode builder
-* FormatStr: format string for exploitation
-* Proc: non-blocking IO for local process and remote service
+* ROP: ELF class with additional methods for creating ROP chains
+* Shellcode: i386/x86-64/arm shellcode builder
+* FormatStr: string builder for format string attack
+* Proc: non-blocking IO for local/remote process
 * Pattern: Metasploit pattern generator/calculator
 * Asm: implementation of asm subcommand
 
 roputils.py also can be used as CLI tool, the subcommands are:
 
-* checksec: a clone of [checksec.sh](http://www.trapkit.de/tools/checksec.html)
-* create: call Pattern.create()
-* offset: call Pattern.offset()
-* gadget: availability check of tiny gadgets
-* scan: grep the binary and disassemble from there
+* checksec: check security features (clone of [checksec.sh](http://www.trapkit.de/tools/checksec.html))
+* create: create Metasploit pattern
+* offset: calculate offset in Metasploit pattern
+* gadget: check availability of tiny gadgets
+* scan: grep the binary and disassemble from each index
 * sc: output shellcode as hexstring
-* asm: i386/x86-64/ARM/Thumb2 assembler and disassembler
+* asm: assemble/disassemble input (i386/x86-64/arm/thumb2)
 * objdump: disassemble with IDA-like annotations
 
 To list up the methods of each class, hit the below command in the same directory as roputils.py:
