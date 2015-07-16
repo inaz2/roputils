@@ -1356,7 +1356,7 @@ def exit_with_usage(format_str):
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
-        exit_with_usage("Usage: python %s [checksec|create|offset|gadget|scan|sc|asm|objdump] ...")
+        exit_with_usage("Usage: python %s [checksec|pc|po|gadget|scan|sc|asm|objdump] ...")
     cmd = sys.argv[1]
 
     if cmd == 'checksec':
@@ -1364,14 +1364,14 @@ if __name__ == '__main__':
             exit_with_usage("check security features\n\nUsage: python %s checksec FILE")
         fpath = sys.argv[2]
         ELF(fpath).checksec()
-    elif cmd == 'create':
+    elif cmd == 'pc':
         if len(sys.argv) < 3:
-            exit_with_usage("create Metasploit pattern\n\nUsage: python %s create SIZE")
+            exit_with_usage("create Metasploit pattern\n\nUsage: python %s pc SIZE")
         size = int(sys.argv[2])
         print Pattern.create(size)
-    elif cmd == 'offset':
+    elif cmd == 'po':
         if len(sys.argv) < 3:
-            exit_with_usage("calculate offset in Metasploit pattern\n\nUsage: python %s offset <ADDRESS|STRING>")
+            exit_with_usage("calculate offset in Metasploit pattern\n\nUsage: python %s po <ADDRESS|STRING>")
         print Pattern.offset(sys.argv[2])
     elif cmd == 'gadget':
         if len(sys.argv) < 3:

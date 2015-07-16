@@ -25,8 +25,8 @@ Currently roputils.py has the below classes:
 roputils.py also can be used as CLI tool, the subcommands are:
 
 * checksec: check security features (clone of [checksec.sh](http://www.trapkit.de/tools/checksec.html))
-* create: create Metasploit pattern
-* offset: calculate offset in Metasploit pattern
+* pc: create Metasploit pattern
+* po: calculate offset in Metasploit pattern
 * gadget: check availability of tiny gadgets
 * scan: grep the binary and disassemble from each index
 * sc: output shellcode as hexstring
