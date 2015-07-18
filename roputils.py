@@ -37,9 +37,6 @@ def p64(x):
     else:
         return struct.pack('<Q', x)
 
-def randint(nbytes):
-    return random.getrandbits(nbytes * 8)
-
 
 class ELF(object):
     def __init__(self, fpath, base=0):
