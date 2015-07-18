@@ -437,10 +437,12 @@ class ELF(object):
 class ROP(ELF):
     def __init__(self, *args, **kwargs):
         ELF.__init__(self, *args, **kwargs)
-        if self.arch in ('i386', 'x86-64'):
-            self.__class__ = type('ROPX86', (ROPX86,), {})
+        if self.arch == 'i386':
+            self.__class__ = type('ROP_I386', (ROP_I386,), {})
+        elif self.arch == 'x86-64':
+            self.__class__ = type('ROP_X86_64', (ROP_X86_64,), {})
         elif self.arch == 'arm':
-            self.__class__ = type('ROPARM', (ROPARM,), {})
+            self.__class__ = type('ROP_ARM', (ROP_ARM,), {})
         else:
             raise Exception("unknown architecture: %r" % self.arch)
 
@@ -499,14 +501,16 @@ class ROP(ELF):
         raise NotImplementedError("not implemented for this architecture: %r" % self.arch)
 
 
-class ROPX86(ROP):
+class ROP_I386(ROP):
+    regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
+
     def gadget(self, keyword, reg=None, n=1):
         def regexp_or(*args):
             return re.compile('(?:' + '|'.join(map(re.escape, args)) + ')')
 
         table = {
-            'pushad': '\x60\xc3',  # i386 only
-            'popad': '\x61\xc3',   # i386 only
+            'pushad': '\x60\xc3',
+            'popad': '\x61\xc3',
             'leave': '\xc9\xc3',
             'ret': '\xc3',
             'int3': '\xcc',
@@ -517,17 +521,183 @@ class ROPX86(ROP):
         if keyword in table:
             return self.search(table[keyword], xonly=True)
 
-        regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
         if reg:
             try:
-                r = regs.index('r'+reg[1:])
+                r = self.regs.index(reg)
+            except ValueError:
+                raise Exception("unexpected register: %r" % reg)
+        else:
+            r = self.regs.index('esp')
+
+        if keyword == 'pop':
+            if reg:
+                chunk1 = chr(0x58+r) + '\xc3'
+                chunk2 = '\x8f' + chr(0xc0+r) + '\xc3'
+                return self.search(regexp_or(chunk1, chunk2), xonly=True)
+            else:
+                # skip esp
+                return self.search(re.compile(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]){%d}\xc3" % n), xonly=True)
+        elif keyword == 'call':
+            chunk = '\xff' + chr(0xd0+r)
+            return self.search(chunk, xonly=True)
+        elif keyword == 'jmp':
+            chunk = '\xff' + chr(0xe0+r)
+            return self.search(chunk, xonly=True)
+        elif keyword == 'jmp_ptr':
+            chunk = '\xff' + chr(0x20+r)
+            return self.search(chunk, xonly=True)
+        elif keyword == 'push':
+            chunk1 = chr(0x50+r) + '\xc3'
+            chunk2 = '\xff' + chr(0xf0+r) + '\xc3'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True)
+        elif keyword == 'pivot':
+            # chunk1: xchg REG, esp
+            # chunk2: xchg esp, REG
+            if r == 0:
+                chunk1 = '\x94\xc3'
+            else:
+                chunk1 = '\x87' + chr(0xe0+r) + '\xc3'
+            chunk2 = '\x87' + chr(0xc4+8*r) + '\xc3'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True)
+        elif keyword == 'loop':
+            chunk1 = '\xeb\xfe'
+            chunk2 = '\xe9\xfb\xff\xff\xff'
+            return self.search(regexp_or(chunk1, chunk2), xonly=True)
+        else:
+            # search directly
+            return ROP.gadget(self, keyword)
+
+    def call(self, addr, *args):
+        if isinstance(addr, str):
+            addr = self.plt(addr)
+
+        buf = self.p(addr)
+        buf += self.p(self.gadget('pop', n=len(args)))
+        buf += self.p(args)
+        return buf
+
+    def call_chain_ptr(self, *calls, **kwargs):
+        raise Exception('support x86-64 only')
+
+    def dl_resolve_data(self, base, name):
+        jmprel = self.dynamic('JMPREL')
+        relent = self.dynamic('RELENT')
+        symtab = self.dynamic('SYMTAB')
+        syment = self.dynamic('SYMENT')
+        strtab = self.dynamic('STRTAB')
+
+        addr_reloc, padlen_reloc = self.align(base, jmprel, relent)
+        addr_sym, padlen_sym = self.align(addr_reloc+relent, symtab, syment)
+        addr_symstr = addr_sym + syment
+
+        r_info = (((addr_sym - symtab) / syment) << 8) | 0x7
+        st_name = addr_symstr - strtab
+
+        buf = self.fill(padlen_reloc)
+        buf += struct.pack('<II', base, r_info)                      # Elf32_Rel
+        buf += self.fill(padlen_sym)
+        buf += struct.pack('<IIII', st_name, 0, 0, 0x12)             # Elf32_Sym
+        buf += self.string(name)
+
+        return buf
+
+    def dl_resolve_call(self, base, *args):
+        jmprel = self.dynamic('JMPREL')
+        relent = self.dynamic('RELENT')
+
+        addr_reloc, padlen_reloc = self.align(base, jmprel, relent)
+        reloc_offset = addr_reloc - jmprel
+
+        buf = self.p(self.plt())
+        buf += self.p(reloc_offset)
+        buf += self.p(self.gadget('pop', n=len(args)))
+        buf += self.p(args)
+
+        return buf
+
+    def syscall(self, number, *args):
+        try:
+            arg_regs = ['ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp']
+            buf = self.p([self.gadget('pop', 'eax'), number])
+            for arg_reg, arg in zip(arg_regs, args):
+                buf += self.p([self.gadget('pop', arg_reg), arg])
+        except ValueError:
+            # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
+            args = list(args) + [0] * (6-len(args))
+            buf = self.p([self.gadget('popad'), args[4], args[3], args[5], 0, args[0], args[2], args[1], number])
+        buf += self.p(self.gadget('int80'))
+        return buf
+
+    def pivot(self, rsp):
+        buf = self.p([self.gadget('pop', 'ebp'), rsp-self.wordsize])
+        buf += self.p(self.gadget('leave'))
+        return buf
+
+    def retfill(self, size, buf=''):
+        buflen = size - len(buf)
+        assert buflen >= 0, "%d bytes over" % (-buflen,)
+        s = self.fill(buflen % self.wordsize)
+        s += self.p(self.gadget('ret')) * (buflen // self.wordsize)
+        return s
+
+    def list_gadgets(self):
+        print "%8s" % 'pop',
+        for i in range(6):
+            try:
+                self.gadget('pop', n=i+1)
+                print "\033[32m%d\033[m" % (i+1),
+            except ValueError:
+                print "\033[31m%d\033[m" % (i+1),
+        print
+
+        for keyword in ['pop', 'jmp', 'jmp_ptr', 'call', 'push', 'pivot']:
+            print "%8s" % keyword,
+            for reg in self.regs:
+                try:
+                    self.gadget(keyword, reg)
+                    print "\033[32m%s\033[m" % reg,
+                except ValueError:
+                    print "\033[31m%s\033[m" % reg,
+            print
+
+        print "%8s" % 'etc',
+        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int80', 'call_gs10', 'syscall', 'loop']:
+            try:
+                self.gadget(keyword)
+                print "\033[32m%s\033[m" % keyword,
+            except ValueError:
+                print "\033[31m%s\033[m" % keyword,
+        print
+
+
+class ROP_X86_64(ROP):
+    regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
+
+    def gadget(self, keyword, reg=None, n=1):
+        def regexp_or(*args):
+            return re.compile('(?:' + '|'.join(map(re.escape, args)) + ')')
+
+        table = {
+            'leave': '\xc9\xc3',
+            'ret': '\xc3',
+            'int3': '\xcc',
+            'int80': '\xcd\x80',
+            'call_gs10': '\x65\xff\x15\x10\x00\x00\x00',
+            'syscall': '\x0f\x05',
+        }
+        if keyword in table:
+            return self.search(table[keyword], xonly=True)
+
+        if reg:
+            try:
+                r = self.regs.index(reg)
                 need_prefix = bool(r >= 8)
                 if need_prefix:
                     r -= 8
             except ValueError:
                 raise Exception("unexpected register: %r" % reg)
         else:
-            r = regs.index('rsp')
+            r = self.regs.index('rsp')
             need_prefix = False
 
         if keyword == 'pop':
@@ -538,10 +708,7 @@ class ROPX86(ROP):
                 return self.search(regexp_or(chunk1, chunk2), xonly=True)
             else:
                 # skip rsp
-                if self.wordsize == 8:
-                    return self.search(re.compile(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]|\x41(?:[\x58-\x5f]|\x8f[\xc0-\xc7])){%d}\xc3" % n), xonly=True)
-                else:
-                    return self.search(re.compile(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]){%d}\xc3" % n), xonly=True)
+                return self.search(re.compile(r"(?:[\x58-\x5b\x5d-\x5f]|\x8f[\xc0-\xc3\xc5-\xc7]|\x41(?:[\x58-\x5f]|\x8f[\xc0-\xc7])){%d}\xc3" % n), xonly=True)
         elif keyword == 'call':
             prefix = '\x41' if need_prefix else ''
             chunk = prefix + '\xff' + chr(0xd0+r)
@@ -566,12 +733,11 @@ class ROPX86(ROP):
                 chunk1 = '\x49\x87' + chr(0xe0+r) + '\xc3'
                 chunk2 = '\x4c\x87' + chr(0xc4+8*r) + '\xc3'
             else:
-                prefix = '\x48' if (reg[0] == 'r') else ''
                 if r == 0:
-                    chunk1 = prefix + '\x94\xc3'
+                    chunk1 = '\x48\x94\xc3'
                 else:
-                    chunk1 = prefix + '\x87' + chr(0xe0+r) + '\xc3'
-                chunk2 = prefix + '\x87' + chr(0xc4+8*r) + '\xc3'
+                    chunk1 = '\x48\x87' + chr(0xe0+r) + '\xc3'
+                chunk2 = '\x48\x87' + chr(0xc4+8*r) + '\xc3'
             return self.search(regexp_or(chunk1, chunk2), xonly=True)
         elif keyword == 'loop':
             chunk1 = '\xeb\xfe'
@@ -585,24 +751,15 @@ class ROPX86(ROP):
         if isinstance(addr, str):
             addr = self.plt(addr)
 
-        if self.wordsize == 8:
-            regs = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
-            buf = ''
-            for i, arg in enumerate(args):
-                buf += self.p([self.gadget('pop', regs[i]), arg])
-            buf += self.p(addr)
-            buf += self.p(args[6:])
-            return buf
-        else:
-            buf = self.p(addr)
-            buf += self.p(self.gadget('pop', n=len(args)))
-            buf += self.p(args)
-            return buf
+        regs = ['rdi', 'rsi', 'rdx', 'rcx', 'r8', 'r9']
+        buf = ''
+        for i, arg in enumerate(args):
+            buf += self.p([self.gadget('pop', regs[i]), arg])
+        buf += self.p(addr)
+        buf += self.p(args[6:])
+        return buf
 
     def call_chain_ptr(self, *calls, **kwargs):
-        if self.wordsize != 8:
-            raise Exception('support x86-64 only')
-
         gadget_candidates = [
             # gcc (Ubuntu/Linaro 4.6.3-1ubuntu5) 4.6.3
             # Ubuntu clang version 3.0-6ubuntu3 (tags/RELEASE_30/final) (based on LLVM 3.0)
@@ -661,95 +818,51 @@ class ROPX86(ROP):
         return buf
 
     def dl_resolve_data(self, base, name):
-        if self.wordsize == 8:
-            jmprel = self.dynamic('JMPREL')
-            relaent = self.dynamic('RELAENT')
-            symtab = self.dynamic('SYMTAB')
-            syment = self.dynamic('SYMENT')
-            strtab = self.dynamic('STRTAB')
+        jmprel = self.dynamic('JMPREL')
+        relaent = self.dynamic('RELAENT')
+        symtab = self.dynamic('SYMTAB')
+        syment = self.dynamic('SYMENT')
+        strtab = self.dynamic('STRTAB')
 
-            addr_reloc, padlen_reloc = self.align(base, jmprel, relaent)
-            addr_sym, padlen_sym = self.align(addr_reloc+relaent, symtab, syment)
-            addr_symstr = addr_sym + syment
+        addr_reloc, padlen_reloc = self.align(base, jmprel, relaent)
+        addr_sym, padlen_sym = self.align(addr_reloc+relaent, symtab, syment)
+        addr_symstr = addr_sym + syment
 
-            r_info = (((addr_sym - symtab) / syment) << 32) | 0x7
-            st_name = addr_symstr - strtab
+        r_info = (((addr_sym - symtab) / syment) << 32) | 0x7
+        st_name = addr_symstr - strtab
 
-            buf = self.fill(padlen_reloc)
-            buf += struct.pack('<QQQ', base, r_info, 0)                  # Elf64_Rela
-            buf += self.fill(padlen_sym)
-            buf += struct.pack('<IIQQ', st_name, 0x12, 0, 0)             # Elf64_Sym
-            buf += self.string(name)
-        else:
-            jmprel = self.dynamic('JMPREL')
-            relent = self.dynamic('RELENT')
-            symtab = self.dynamic('SYMTAB')
-            syment = self.dynamic('SYMENT')
-            strtab = self.dynamic('STRTAB')
-
-            addr_reloc, padlen_reloc = self.align(base, jmprel, relent)
-            addr_sym, padlen_sym = self.align(addr_reloc+relent, symtab, syment)
-            addr_symstr = addr_sym + syment
-
-            r_info = (((addr_sym - symtab) / syment) << 8) | 0x7
-            st_name = addr_symstr - strtab
-
-            buf = self.fill(padlen_reloc)
-            buf += struct.pack('<II', base, r_info)                      # Elf32_Rel
-            buf += self.fill(padlen_sym)
-            buf += struct.pack('<IIII', st_name, 0, 0, 0x12)             # Elf32_Sym
-            buf += self.string(name)
+        buf = self.fill(padlen_reloc)
+        buf += struct.pack('<QQQ', base, r_info, 0)                  # Elf64_Rela
+        buf += self.fill(padlen_sym)
+        buf += struct.pack('<IIQQ', st_name, 0x12, 0, 0)             # Elf64_Sym
+        buf += self.string(name)
 
         return buf
 
     def dl_resolve_call(self, base, *args):
-        if self.wordsize == 8:
-            # prerequisite:
-            # 1) overwrite (link_map + 0x1c8) with NULL
-            # 2) set registers for arguments
-            if args:
-                raise Exception('arguments must be set to the registers beforehand')
+        # prerequisite:
+        # 1) overwrite (link_map + 0x1c8) with NULL
+        # 2) set registers for arguments
+        if args:
+            raise Exception('arguments must be set to the registers beforehand')
 
-            jmprel = self.dynamic('JMPREL')
-            relaent = self.dynamic('RELAENT')
+        jmprel = self.dynamic('JMPREL')
+        relaent = self.dynamic('RELAENT')
 
-            addr_reloc, padlen_reloc = self.align(base, jmprel, relaent)
-            reloc_offset = (addr_reloc - jmprel) / relaent
+        addr_reloc, padlen_reloc = self.align(base, jmprel, relaent)
+        reloc_offset = (addr_reloc - jmprel) / relaent
 
-            buf = self.p(self.plt())
-            buf += self.p(reloc_offset)
-        else:
-            jmprel = self.dynamic('JMPREL')
-            relent = self.dynamic('RELENT')
-
-            addr_reloc, padlen_reloc = self.align(base, jmprel, relent)
-            reloc_offset = addr_reloc - jmprel
-
-            buf = self.p(self.plt())
-            buf += self.p(reloc_offset)
-            buf += self.p(self.gadget('pop', n=len(args)))
-            buf += self.p(args)
+        buf = self.p(self.plt())
+        buf += self.p(reloc_offset)
 
         return buf
 
     def syscall(self, number, *args):
-        if self.wordsize == 8:
-            arg_regs = ['rdi', 'rsi', 'rdx', 'r10', 'r8', 'r9']
-            buf = self.p([self.gadget('pop', 'rax'), number])
-            for arg_reg, arg in zip(arg_regs, args):
-                buf += self.p([self.gadget('pop', arg_reg), arg])
-            buf += self.p(self.gadget('syscall'))
-        else:
-            try:
-                arg_regs = ['ebx', 'ecx', 'edx', 'esi', 'edi', 'ebp']
-                buf = self.p([self.gadget('pop', 'eax'), number])
-                for arg_reg, arg in zip(arg_regs, args):
-                    buf += self.p([self.gadget('pop', arg_reg), arg])
-            except ValueError:
-                # popad = pop edi, esi, ebp, esp, ebx, edx, ecx, eax
-                args = list(args) + [0] * (6-len(args))
-                buf = self.p([self.gadget('popad'), args[4], args[3], args[5], 0, args[0], args[2], args[1], number])
-            buf += self.p(self.gadget('int80'))
+        arg_regs = ['rdi', 'rsi', 'rdx', 'r10', 'r8', 'r9']
+        buf = self.p([self.gadget('pop', 'rax'), number])
+        for arg_reg, arg in zip(arg_regs, args):
+            buf += self.p([self.gadget('pop', arg_reg), arg])
+        buf += self.p(self.gadget('syscall'))
         return buf
 
     def pivot(self, rsp):
@@ -765,11 +878,6 @@ class ROPX86(ROP):
         return s
 
     def list_gadgets(self):
-        if self.wordsize == 8:
-            regs = ['rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi', 'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15']
-        else:
-            regs = ['eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi']
-
         print "%8s" % 'pop',
         for i in range(6):
             try:
@@ -781,7 +889,7 @@ class ROPX86(ROP):
 
         for keyword in ['pop', 'jmp', 'jmp_ptr', 'call', 'push', 'pivot']:
             print "%8s" % keyword,
-            for reg in regs:
+            for reg in self.regs:
                 try:
                     self.gadget(keyword, reg)
                     print "\033[32m%s\033[m" % reg,
@@ -790,7 +898,7 @@ class ROPX86(ROP):
             print
 
         print "%8s" % 'etc',
-        for keyword in ['pushad', 'popad', 'leave', 'ret', 'int3', 'int80', 'call_gs10', 'syscall', 'loop']:
+        for keyword in ['leave', 'ret', 'int3', 'int80', 'call_gs10', 'syscall', 'loop']:
             try:
                 self.gadget(keyword)
                 print "\033[32m%s\033[m" % keyword,
@@ -799,7 +907,7 @@ class ROPX86(ROP):
         print
 
 
-class ROPARM(ROP):
+class ROP_ARM(ROP):
     def pt(self, x):
         if isinstance(x, str):
             return (self(x) | 1)
