@@ -930,14 +930,17 @@ class ROP_ARM(ROP):
 
     def call_chain(self, *calls, **kwargs):
         gadget_candidates = [
+            # gcc (Ubuntu/Linaro 4.6.3-1ubuntu5) 4.6.3
+            ('\x30\x46\x39\x46\x42\x46\x01\x34\x98\x47\x4c\x45\xf6\xd1', '\xbd\xe8\xf8\x83', True),
             # gcc (Ubuntu/Linaro 4.8.2-19ubuntu1) 4.8.2
-            ('\x38\x46\x41\x46\x4a\x46\x98\x47\xb4\x42\xf6\xd1', '\xbd\xe8\xf8\x83'),
+            ('\x38\x46\x41\x46\x4a\x46\x98\x47\xb4\x42\xf6\xd1', '\xbd\xe8\xf8\x83', False),
         ]
 
-        for chunk1, chunk2 in gadget_candidates:
+        for chunk1, chunk2, _is_4_6 in gadget_candidates:
             try:
                 set_regs = self.gadget(chunk2)
                 call_reg = self.gadget(chunk1 + chunk2)
+                is_4_6 = _is_4_6
                 break
             except ValueError:
                 pass
@@ -954,12 +957,21 @@ class ROP_ARM(ROP):
             if isinstance(addr, str):
                 addr = self.plt(addr)
 
-            buf += self.p(addr)
-            buf += self.p([0, 0, 0])
-            for arg in args:
-                buf += self.p(arg)
-            buf += self.p(0) * (3-len(args))
-            buf += self.pt(call_reg)
+            if is_4_6:
+                buf += self.p(addr)
+                buf += self.p([0, 0])
+                for arg in args:
+                    buf += self.p(arg)
+                buf += self.p(0) * (3-len(args))
+                buf += self.p(1)
+                buf += self.pt(call_reg)
+            else:
+                buf += self.p(addr)
+                buf += self.p([0, 0, 0])
+                for arg in args:
+                    buf += self.p(arg)
+                buf += self.p(0) * (3-len(args))
+                buf += self.pt(call_reg)
 
         if 'pivot' in kwargs:
             try:
