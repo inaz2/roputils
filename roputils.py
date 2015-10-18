@@ -1527,5 +1527,4 @@ if __name__ == '__main__':
         fpath = sys.argv[2]
         ELF(fpath).objdump()
     else:
-        print >>sys.stderr, fmt_usage % sys.argv[0]
-        sys.exit(1)
+        exit_with_usage("Usage: python %s [checksec|pc|po|gadget|scan|sc|asm|objdump] ...")
