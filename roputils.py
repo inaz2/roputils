@@ -67,7 +67,11 @@ class ELF(object):
             'reloc': r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$',
             'symbol': r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>\S+)',
         }
-        plt_entry_size = 0x10
+        plt_size_map = {
+            'i386': (0x10, 0x10),
+            'x86-64': (0x10, 0x10),
+            'arm': (0x14, 0xc),
+        }
         has_dynamic_section = True
         has_symbol_table = True
 
@@ -165,6 +169,7 @@ class ELF(object):
                 self._dynamic[type_] = int(value.split()[0])
         # read Relocation section (.rel.plt/.rela.plt)
         in_unwind_table_index = False
+        plt_header_size, plt_entry_size = plt_size_map[self.arch]
         while True:
             line = p.stdout.readline()
             if line.startswith('Symbol table'):
@@ -184,13 +189,7 @@ class ELF(object):
             if not type_.endswith('JUMP_SLOT'):
                 continue
             self._got[name] = offset
-            self._plt[name] = int16(m.group('Value'))
-            if self._plt[name] == 0:
-                if self.wordsize == 8:
-                    elf_r_sym = info >> 32
-                else:
-                    elf_r_sym = info >> 8
-                self._plt[name] = self._section['.plt'][0] + plt_entry_size * elf_r_sym
+            self._plt[name] = self._section['.plt'][0] + plt_header_size + plt_entry_size * len(self._plt)
             if name == '__stack_chk_fail':
                 self.sec['stack_canary'] = True
         # read Symbol table
