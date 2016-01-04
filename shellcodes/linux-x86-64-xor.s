@@ -9,7 +9,7 @@ loop:
         jz stage
         inc rsi
         jmp loop
-        .ascii "\x00\x00\x00\x00"
+        .skip 4
 caller:
         call callee
 stage:
