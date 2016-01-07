@@ -5,7 +5,6 @@ import os
 import re
 import struct
 import socket
-import fcntl
 import select
 import random
 import tempfile
