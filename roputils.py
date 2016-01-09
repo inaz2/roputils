@@ -58,6 +58,7 @@ class ELF(object):
         self._plt = {}
         self._symbol = {}
         self._load_blobs = []
+        self._string = {}
 
         regexp = {
             'section': r'^\s*\[(?P<Nr>[^\]]+)\]\s+(?P<Name>\S+)\s+(?P<Type>\S+)\s+(?P<Address>\S+)\s+(?P<Off>\S+)\s+(?P<Size>\S+)\s+(?P<ES>\S+)\s+(?P<Flg>\S+)\s+(?P<Lk>\S+)\s+(?P<Inf>\S+)\s+(?P<Al>\S+)$',
@@ -65,6 +66,7 @@ class ELF(object):
             'dynamic': r'^\s*(?P<Tag>\S+)\s+\((?P<Type>[^)]+)\)\s+(?P<Value>.+)$',
             'reloc': r'^\s*(?P<Offset>\S+)\s+(?P<Info>\S+)\s+(?P<Type>\S+)\s+(?P<Value>\S+)\s+(?P<Name>\S+)(?: \+ (?P<AddEnd>\S+))?$',
             'symbol': r'^\s*(?P<Num>[^:]+):\s+(?P<Value>\S+)\s+(?P<Size>\S+)\s+(?P<Type>\S+)\s+(?P<Bind>\S+)\s+(?P<Vis>\S+)\s+(?P<Ndx>\S+)\s+(?P<Name>\S+)',
+            'string': r'([\s\x21-\x7e]{4,})\x00',
         }
         plt_size_map = {
             'i386': (0x10, 0x10),
@@ -145,6 +147,8 @@ class ELF(object):
                     blob = f.read(filesiz)
                 is_executable = ('E' in flg)
                 self._load_blobs.append((virtaddr, blob, is_executable))
+                for m in re.finditer(regexp['string'], blob):
+                    self._string[virtaddr+m.start()] = m.group(1)
         # read Dynamic section
         while has_dynamic_section:
             line = p.stdout.readline()
@@ -293,10 +297,6 @@ class ELF(object):
         p = Popen(Asm.cmd[self.arch]['objdump'] + [self.fpath], stdout=PIPE)
         stdout, stderr = p.communicate()
 
-        p = Popen(['strings', '-tx', fpath], stdout=PIPE)
-        rev_string = dict((int16(line[:7].strip()), line[8:-1]) for line in p.stdout)
-        p.wait()
-
         rev_symbol = {}
         rev_plt = {}
         for k, v in self._symbol.iteritems():
@@ -422,11 +422,8 @@ class ELF(object):
                 if ref in rev_symbol:
                     annotations.append(', '.join(rev_symbol[ref]))
 
-                for virtaddr, blob, is_exebutable in self._load_blobs:
-                    offset = ref - virtaddr
-                    if offset in rev_string:
-                        annotations.append(repr(rev_string[offset]))
-                        break
+                if ref in self._string:
+                    annotations.append(repr(self._string[ref]))
 
             if annotations:
                 print "%-70s \x1b[30;1m; %s\x1b[0m" % (line, ' '.join(annotations))
