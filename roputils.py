@@ -351,9 +351,14 @@ class ELF(object):
             data_xrefs[k] = sorted(list(v))
 
         # output with annotations
-        def repl_func1(addr, color):
+        def repl_func1(addr):
             def _f(m):
+                op = m.group(1)
                 ref = int16(m.group(2))
+                if op.startswith('call'):
+                    color = 33
+                else:
+                    color = 32 if ref > addr else 35
                 return "\x1b[%dm%s%s [%+#x]\x1b[0m" % (color, m.group(1), labels[ref], ref-addr)
             return _f
 
@@ -376,9 +381,9 @@ class ELF(object):
                 continue
 
             line = re.sub(r'(call\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[33m\\1\\2\x1b[0m', line)
-            line = re.sub(r'(call\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr, 33), line)
+            line = re.sub(r'(call\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr), line)
             line = re.sub(r'(j\w{1,2}\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[32m\\1\\2\x1b[0m', line)
-            line = re.sub(r'(j\w{1,2}\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr, 32), line)
+            line = re.sub(r'(j\w{1,2}\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr), line)
             line = re.sub(r',0x([\dA-Fa-f]{3,})\b', repl_func2(36), line)
 
             expr = line.split(':', 1)[1]
@@ -387,21 +392,21 @@ class ELF(object):
             if labels[addr]:
                 if not addr in rev_symbol and not addr in rev_plt:
                     if labels[addr].startswith('loc_'):
-                        color = 32
+                        label += "\x1b[38;1m%s:\x1b[0m" % labels[addr]
+                        label = label.ljust(78+11)
                     else:
-                        color = 33
-                    label += "\x1b[%dm%s:\x1b[0m" % (color, labels[addr])
-                    label = label.ljust(78+9)
+                        label += "\x1b[33m%s:\x1b[0m" % labels[addr]
+                        label = label.ljust(78+9)
                 else:
                     label = label.ljust(78)
                 if addr in code_xrefs:
                     ary = ["%x%s" % (x, arrows[x < addr]) for x in code_xrefs[addr]]
-                    label += " \x1b[32m; CODE XREF: %s\x1b[0m" % ', '.join(ary)
+                    label += " \x1b[30;1m; CODE XREF: %s\x1b[0m" % ', '.join(ary)
                 if addr in data_xrefs:
                     ary = ["%x%s" % (x, arrows[x < addr]) for x in data_xrefs[addr]]
-                    label += " \x1b[36m; DATA XREF: %s\x1b[0m" % ', '.join(ary)
+                    label += " \x1b[30;1m; DATA XREF: %s\x1b[0m" % ', '.join(ary)
                 if addr == self._entry_point:
-                    label += ' \x1b[33m; ENTRY POINT\x1b[0m'
+                    label += ' \x1b[30;1m; ENTRY POINT\x1b[0m'
             if label:
                 print label
 
