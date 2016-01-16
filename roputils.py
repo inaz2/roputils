@@ -1290,9 +1290,11 @@ class Proc(object):
 
     def expect(self, regexp):
         buf = ''
-        while not re.search(regexp, buf):
+        while True:
             buf += self.read(1, None)
-        return buf
+            m = re.search(regexp, buf)
+            if m:
+                return m
 
     def readline(self):
         return self.read_until('\n')
