@@ -1222,7 +1222,14 @@ class Proc(object):
         def run_server(s, e, cmd):
             c, addr = s.accept()
             s.close()
-            p = Popen(cmd, stdin=c, stdout=c, stderr=c)
+
+            try:
+                p = Popen(cmd, stdin=c, stdout=c, stderr=c)
+            except Exception as err:
+                c.close()
+                e.set()
+                raise err
+
             if self.debug:
                 raw_input("\x1b[32mpid %d is running, attach the debugger if needed. Hit enter key to continue...\x1b[0m" % p.pid)
             e.set()
