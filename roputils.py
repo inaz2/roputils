@@ -1243,6 +1243,7 @@ class Proc(object):
 
         e = Event()
         t = Thread(target=run_server, args=(s, e, cmd))
+        t.daemon = True
         t.start()
         c = socket.create_connection(s.getsockname())
         e.wait()
