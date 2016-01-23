@@ -1224,7 +1224,7 @@ class Proc(object):
             s.close()
 
             try:
-                p = Popen(cmd, stdin=c, stdout=c, stderr=c)
+                p = Popen(cmd, stdin=c, stdout=c, stderr=c, preexec_fn=lambda: os.setsid())
             except Exception as err:
                 c.close()
                 e.set()
