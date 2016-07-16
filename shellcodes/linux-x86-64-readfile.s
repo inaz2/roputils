@@ -13,15 +13,18 @@ main:
         push 2
         pop rax
         syscall                 # open
+        xchg rdi, rax
         xchg rsi, rax
+        push 1
+        pop rdx
+        shl rdx, 12
+        syscall                 # read
         xchg rdx, rax
         push 1
         pop rdi
-        xor r10, r10
-        not r10d
-        push 40
+        push 1
         pop rax
-        syscall                 # sendfile
+        syscall                 # write
         xor rdi, rdi
         push 60
         pop rax
