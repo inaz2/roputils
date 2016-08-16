@@ -380,10 +380,10 @@ class ELF(object):
                 print line
                 continue
 
-            line = re.sub(r'(call\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[33m\\1\\2\x1b[0m', line)
-            line = re.sub(r'(call\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr), line)
-            line = re.sub(r'(j\w{1,2}\s+)[\dA-Fa-f]+\s+<([\w@\.]+)>', '\x1b[32m\\1\\2\x1b[0m', line)
-            line = re.sub(r'(j\w{1,2}\s+)(?:0x)?([\dA-Fa-f]+)\b.*', repl_func1(addr), line)
+            line = re.sub(r'(call\s+)[\dA-Fa-f]{3,}\s+<([\w@\.]+)>', '\x1b[33m\\1\\2\x1b[0m', line)
+            line = re.sub(r'(call\s+)(?:0x)?([\dA-Fa-f]{3,})\b.*', repl_func1(addr), line)
+            line = re.sub(r'(j\w{1,2}\s+)[\dA-Fa-f]{3,}\s+<([\w@\.]+)>', '\x1b[32m\\1\\2\x1b[0m', line)
+            line = re.sub(r'(j\w{1,2}\s+)(?:0x)?([\dA-Fa-f]{3,})\b.*', repl_func1(addr), line)
             line = re.sub(r',0x([\dA-Fa-f]{3,})\b', repl_func2(36), line)
 
             expr = line.split(':', 1)[1]
