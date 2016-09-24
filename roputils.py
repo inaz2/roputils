@@ -1211,6 +1211,7 @@ class Proc(object):
             self.s = socket.create_connection((kwargs['host'], kwargs['port']))
         else:
             self.s = self.connect_process(args)
+
         self.s.setblocking(0)
 
     def connect_process(self, cmd):
@@ -1293,11 +1294,11 @@ class Proc(object):
 
     def expect(self, regexp):
         buf = ''
-        while True:
+        m = None
+        while not m:
             buf += self.read(1, None)
             m = re.search(regexp, buf)
-            if m:
-                return m
+        return m
 
     def readline(self):
         return self.read_until('\n')
@@ -1358,17 +1359,17 @@ class Proc(object):
         stdout, stderr = p.communicate()
         return stdout
 
-    def write_p64(self, s):
-        return self.write(p64(s))
-
-    def write_p32(self, s):
-        return self.write(p32(s))
-
     def read_p64(self):
         return p64(self.read(8, None))
 
     def read_p32(self):
         return p32(self.read(4, None))
+
+    def write_p64(self, s):
+        return self.write(p64(s))
+
+    def write_p32(self, s):
+        return self.write(p32(s))
 
 
 class Pattern(object):
