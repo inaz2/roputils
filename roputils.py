@@ -1333,12 +1333,12 @@ class Proc(object):
         self.close()
 
     @contextmanager
-    def listen(self, port=4444, is_shell=False):
+    def listen(self, port=0, is_shell=False):
         check_cmd = 'echo "\x1b[32mgot a shell!\x1b[0m"'  # green
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(('', 0))  # INADDR_ANY, INPORT_ANY
+        s.bind(('', port))
         s.listen(1)
 
         yield s.getsockname()
