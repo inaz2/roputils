@@ -191,6 +191,7 @@ class ELF(object):
             offset, info = int16(m.group('Offset', 'Info'))
             if not type_.endswith('JUMP_SLOT'):
                 continue
+            name = name.split('@')[0]
             self._got[name] = offset
             self._plt[name] = self._section['.plt'][0] + plt_header_size + plt_entry_size * len(self._plt)
             if name == '__stack_chk_fail':
