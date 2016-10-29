@@ -152,7 +152,7 @@ class ELF(object):
         # read Dynamic section
         while has_dynamic_section:
             line = p.stdout.readline()
-            if line.startswith('Relocation section') and '.plt' in line:
+            if line.startswith('Relocation section'):
                 break
             m = re.search(regexp['dynamic'], line)
             if not m or m.group('Tag') == 'Tag':
