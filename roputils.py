@@ -917,11 +917,11 @@ class ROP_ARM(ROP):
 
     def gadget(self, keyword, reg=None, n=1):
         table = {
-            'pivot_r7': '\xbd\x46\x80\xbd',                  # mov sp, r7; pop {r7, pc}
-            'pivot_fp': '\x0b\xd0\xa0\xe1\x00\x88\xbd\xe8',  # mov sp, fp; pop {fp, pc}
-            'pop_r0_3fp': '\xbd\xe8\x0f\x88',                # ldmia.w sp!, {r0, r1, r2, r3, fp, pc}
-            'pop_r4_7': '\xf0\xbd',                          # pop {r4, r5, r6, r7, pc}
-            'svc0': '\x00\xdf',                              # svc 0
+            'pivot_r7': '\xbd\x46\x80\xbd',                  # mov sp, r7; pop {r7, pc} thumb
+            'pivot_fp': '\x0b\xd0\xa0\xe1\x00\x88\xbd\xe8',  # mov sp, fp; pop {fp, pc} arm
+            'pop_r0_3fp': '\xbd\xe8\x0f\x88',                # ldmia.w sp!, {r0, r1, r2, r3, fp, pc} arm
+            'pop_r4_7': '\xf0\xbd',                          # pop {r4, r5, r6, r7, pc} thumb
+            'svc0': '\x00\xdf',                              # svc 0 thumb
         }
         if keyword in table:
             return self.search(table[keyword], xonly=True)
@@ -932,47 +932,67 @@ class ROP_ARM(ROP):
     def call_chain(self, *calls, **kwargs):
         gadget_candidates = [
             # gcc (Ubuntu/Linaro 4.6.3-1ubuntu5) 4.6.3
-            ('\x30\x46\x39\x46\x42\x46\x01\x34\x98\x47\x4c\x45\xf6\xd1', '\xbd\xe8\xf8\x83', True),
+            ('\x30\x46\x39\x46\x42\x46\x01\x34\x98\x47\x4c\x45\xf6\xd1', '\xbd\xe8\xf8\x83', True, True),
             # gcc (Ubuntu/Linaro 4.8.2-19ubuntu1) 4.8.2
-            ('\x38\x46\x41\x46\x4a\x46\x98\x47\xb4\x42\xf6\xd1', '\xbd\xe8\xf8\x83', False),
+            ('\x38\x46\x41\x46\x4a\x46\x98\x47\xb4\x42\xf6\xd1', '\xbd\xe8\xf8\x83', False, True),
+            # Raspbian clang version 3.5.0-10+rpi1 (tags/RELEASE_350/final) (based on LLVM 3.5.0)
+            ('\x04\x30\xb5\xe5\x07\x00\xa0\xe1\x08\x10\xa0\xe1\x09\x20\xa0\xe1\x33\xff\x2f\xe1\x06\x00\x54\xe1\xf7\xff\xff\x1a', '\xf8\x83\xbd\xe8', True, False),
         ]
 
-        for chunk1, chunk2, _is_4_6 in gadget_candidates:
+        for chunk1, chunk2, _is_4_6, _is_thumb in gadget_candidates:
             try:
                 set_regs = self.gadget(chunk2)
                 call_reg = self.gadget(chunk1 + chunk2)
                 is_4_6 = _is_4_6
+                is_thumb = _is_thumb
                 break
             except ValueError:
                 pass
         else:
             raise Exception('gadget not found')
-
-        buf = self.pt(set_regs)
+        
+        if is_thumb:
+            buf = self.pt(set_regs)
+        else:
+            buf = self.p(set_regs)
 
         for args in calls:
             if len(args) > 4:
                 raise Exception('4th argument and latter should be set in advance')
 
             addr = args.pop(0)
-            if isinstance(addr, str):
+            if isinstance(addr, str) and is_thumb:
                 addr = self.plt(addr)
-
-            if is_4_6:
-                buf += self.p(addr)
-                buf += self.p([0, 0])
-                for arg in args:
-                    buf += self.p(arg)
-                buf += self.p(0) * (3-len(args))
-                buf += self.p(1)
-                buf += self.pt(call_reg)
+            elif isinstance(addr, str) and !is_thumb:
+                addr = self.got(addr) - self.wordsize
             else:
+                raise Exception('Call by address is only supported in thumb mode. Call it manually!')
+            
+            if is_thumb:
+                if is_4_6:
+                    buf += self.p(addr)
+                    buf += self.p([0, 0])
+                    for arg in args:
+                        buf += self.p(arg)
+                    buf += self.p(0) * (3-len(args))
+                    buf += self.p(1)
+                    buf += self.pt(call_reg)
+                else:
+                    buf += self.p(addr)
+                    buf += self.p([0, 0, 0])
+                    for arg in args:
+                        buf += self.p(arg)
+                    buf += self.p(0) * (3-len(args))
+                    buf += self.pt(call_reg)
+            else:
+                buf += self.p([0,0])
                 buf += self.p(addr)
-                buf += self.p([0, 0, 0])
+                buf += self.p(0)
                 for arg in args:
                     buf += self.p(arg)
                 buf += self.p(0) * (3-len(args))
-                buf += self.pt(call_reg)
+                buf += self.p(call_reg)
+
 
         if 'pivot' in kwargs:
             try:
