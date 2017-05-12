@@ -963,7 +963,7 @@ class ROP_ARM(ROP):
             addr = args.pop(0)
             if isinstance(addr, str) and is_thumb:
                 addr = self.plt(addr)
-            elif isinstance(addr, str) and !is_thumb:
+            elif isinstance(addr, str) and  not is_thumb:
                 addr = self.got(addr) - self.wordsize
             else:
                 raise Exception('Call by address is only supported in thumb mode. Call it manually!')
