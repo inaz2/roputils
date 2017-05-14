@@ -961,12 +961,14 @@ class ROP_ARM(ROP):
                 raise Exception('4th argument and latter should be set in advance')
 
             addr = args.pop(0)
-            if isinstance(addr, str) and is_thumb:
-                addr = self.plt(addr)
-            elif isinstance(addr, str) and  not is_thumb:
-                addr = self.got(addr) - self.wordsize
+            if is_thumb:
+                if isinstance(addr, str):
+                    addr = self.plt(addr)
             else:
-                raise Exception('Call by address is only supported in thumb mode. Call it manually!')
+                if isinstance(addr, str):
+                    addr = self.got(addr) - self.wordsize
+                else:
+                    raise Exception('Call by address is only supported in thumb mode. Call it manually!')
             
             if is_thumb:
                 if is_4_6:
@@ -992,7 +994,6 @@ class ROP_ARM(ROP):
                     buf += self.p(arg)
                 buf += self.p(0) * (3-len(args))
                 buf += self.p(call_reg)
-
 
         if 'pivot' in kwargs:
             try:
